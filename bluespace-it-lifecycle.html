@@ -149,11 +149,11 @@ tr.row-warning td{border-left:3px solid var(--yellow)}
 .flow-cell:last-child{border-right:none}
 
 /* DETAIL DRAWER */
-#drawer{width:320px;background:var(--surface);border-left:1px solid var(--border);padding:20px;overflow-y:auto;flex-shrink:0;display:none}
+#drawer{width:420px;background:#fff;border-left:1px solid var(--border);padding:0;overflow-y:auto;flex-shrink:0;display:none;box-shadow:-4px 0 20px rgba(0,0,0,.06)}
 #drawer.open{display:block}
-.drawer-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)}
-.drawer-k{font-size:11px;color:var(--text3);font-weight:500}
-.drawer-v{font-size:11px;font-weight:600;text-align:right;max-width:170px}
+.drawer-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #F1F5F9}
+.drawer-k{font-size:10px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.drawer-v{font-size:12px;font-weight:700;text-align:right;max-width:230px;color:#1E293B}
 .pipeline{display:flex;gap:0;margin:12px 0}
 .pipeline-step{flex:1;text-align:center;cursor:pointer}
 .pipeline-bar{height:4px;transition:background .2s}
@@ -260,13 +260,7 @@ tr.row-warning td{border-left:3px solid var(--yellow)}
 </div>
 
 <!-- USER BAR (shown in sidebar when logged in) -->
-<div id="user-bar" class="hidden" style="padding:10px 14px;border-bottom:1px solid var(--border);background:var(--blueLight);display:flex;align-items:center;gap:8px">
-  <div id="user-avatar" style="width:28px;height:28px;border-radius:50%;background:var(--blue);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0"></div>
-  <div style="flex:1;min-width:0">
-    <div id="user-email-display" style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
-  </div>
-  <button onclick="authSignOut()" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--text3);padding:2px 6px;border-radius:4px;font-family:inherit" title="Cerrar sesión">Salir</button>
-</div>
+
 
 <div id="sidebar">
   <div class="logo-wrap">
@@ -280,6 +274,14 @@ tr.row-warning td{border-left:3px solid var(--yellow)}
       bluespace
     </div>
     <div class="logo-sub">Gestión ciclo de vida IT</div>
+  </div>
+  <!-- USER BAR - inside sidebar top -->
+  <div id="user-bar" class="hidden" style="padding:8px 14px;border-bottom:1px solid var(--border);background:#F0F7FF;display:flex;align-items:center;gap:8px">
+    <div id="user-avatar" style="width:28px;height:28px;border-radius:50%;background:var(--blue);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0"></div>
+    <div style="flex:1;min-width:0">
+      <div id="user-email-display" style="font-size:11px;font-weight:600;color:var(--blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+    </div>
+    <button onclick="authSignOut()" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text3);padding:3px 7px;border-radius:5px;font-family:inherit;font-weight:600;border:1px solid var(--border)" onmouseover="this.style.background='#fee'" onmouseout="this.style.background='none'" title="Cerrar sesión">Salir</button>
   </div>
   <div style="padding:8px 0;flex:1">
     <div class="nav-section">Menú</div>
@@ -1778,15 +1780,41 @@ function openDrawer(id){
   }).join("");
 
   document.getElementById("drawer-content").innerHTML=`
-    <div style="padding:12px 14px;background:var(--bg);border-radius:8px;margin-bottom:14px">
-      <div style="font-size:13px;font-weight:700;margin-bottom:6px;line-height:1.3">${a.type==="Laptop"?"💻":"📱"} ${escHtml(a.product)}</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">${urgBadge(a.urgency)}${replBadge(a.replStatus)}</div>
+    <!-- DRAWER HEADER -->
+    <div style="padding:18px 20px 14px;background:linear-gradient(135deg,#F0F7FF 0%,#fff 100%);border-bottom:1px solid #E8F0FE">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;padding-right:30px">
+        <div>
+          <div style="font-size:14px;font-weight:800;color:#0F172A;margin-bottom:2px">${a.type==="Laptop"?"💻":"📱"} ${escHtml(a.product)}</div>
+          <div style="font-size:11px;color:#64748B;font-weight:500">${escHtml(a.nom)}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+          ${urgBadge(a.urgency)}
+          ${replBadge(a.replStatus)}
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+        <div style="background:#fff;border-radius:8px;padding:8px 10px;border:1px solid #E8F0FE;text-align:center">
+          <div style="font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Año</div>
+          <div style="font-size:14px;font-weight:800;color:#1E293B;margin-top:1px">${a.year||"—"}</div>
+        </div>
+        <div style="background:#fff;border-radius:8px;padding:8px 10px;border:1px solid #E8F0FE;text-align:center">
+          <div style="font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Edad</div>
+          <div style="font-size:14px;font-weight:800;margin-top:1px;color:${a.urgency==="critical"?"#DC2626":a.urgency==="high"?"#D97706":a.urgency==="warning"?"#CA8A04":"#16A34A"}">${a.age!=null?a.age+"a":"—"}</div>
+        </div>
+        <div style="background:#fff;border-radius:8px;padding:8px 10px;border:1px solid #E8F0FE;text-align:center">
+          <div style="font-size:9px;color:#64748B;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Umbral</div>
+          <div style="font-size:14px;font-weight:800;color:#1E293B;margin-top:1px">${THRESH[a.type]||4}a</div>
+        </div>
+      </div>
     </div>
-    ${[["ID",escHtml(a.id)],["Departamento",`<span style="color:var(--blue)">${escHtml(a.dept)}</span>`],["Usuario",escHtml(a.user)||"—"],["Estado SDP",sdpLabel(a.sdpStatus)],["Año compra",a.year||"—"],["Edad estimada",a.age!=null?`<span class="${ageClass(a)}">${a.age} años</span>`:"—"],["Umbral",`${THRESH[a.type]||4} años`]].map(([k,v])=>`
-    <div class="drawer-row"><span class="drawer-k">${k}</span><span class="drawer-v">${v}</span></div>`).join("")}
-    ${a.notes?`<div style="margin-top:10px;padding:10px;background:var(--bg);border-radius:8px;font-size:11px;color:var(--text2);line-height:1.6;border-left:3px solid var(--border)">${escHtml(a.notes)}</div>`:""}
-    <div style="margin-top:16px;margin-bottom:14px">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:10px">Pipeline de reemplazo</div>
+    <!-- DRAWER DETAILS -->
+    <div style="padding:14px 20px">
+      ${[["ID",escHtml(a.id)],["Departamento",`<span style="color:var(--blue);font-weight:600">${escHtml(a.dept)}</span>`],["Usuario",escHtml(a.user)||"—"],["Estado SDP",sdpLabel(a.sdpStatus)]].map(([k,v])=>`
+      <div class="drawer-row"><span class="drawer-k">${k}</span><span class="drawer-v">${v}</span></div>`).join("")}
+      ${a.notes?`<div style="margin-top:10px;padding:10px 12px;background:#FFFBEB;border-radius:8px;font-size:11px;color:#78350F;line-height:1.6;border-left:3px solid #FCD34D">📝 ${escHtml(a.notes)}</div>`:""}
+    </div>
+    <div style="padding:0 20px 14px">
+      <div style="font-size:10px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Pipeline de reemplazo</div>
       <div style="font-size:10px;color:var(--text3);margin-bottom:6px;text-align:center">
         ${a.replStatus?"👆 Haz clic en cualquier paso para cambiar el estado":"👆 Haz clic en un paso para iniciar el proceso"}
       </div>
