@@ -524,7 +524,7 @@ tr.row-warning td{border-left:3px solid var(--yellow)}
     </div>
     <div class="card">
       <div class="card-title">📂 Cargar archivo Excel (.xlsx / .csv)</div>
-      <div class="card-sub">Solo se importarán los activos LT (portátiles) y MB (móviles). Los duplicados se detectan automáticamente por ID.</div>
+      <div class="card-sub">Se importarán los activos LT (portátiles), MB (móviles) y TAB (tablets). Los duplicados se detectan automáticamente por ID.</div>
       <div class="import-zone" id="drop-zone" onclick="document.getElementById('file-input').click()" ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
         <div class="import-zone-icon">📊</div>
         <div class="import-zone-text">Arrastra tu Excel aquí o haz clic para seleccionar</div>
@@ -562,7 +562,8 @@ tr.row-warning td{border-left:3px solid var(--yellow)}
         <button class="btn btn-default btn-sm" onclick="exportData()">⬇️ Exportar datos (JSON)</button>
         <button class="btn btn-default btn-sm" onclick="document.getElementById('import-json').click()">⬆️ Importar datos (JSON)</button>
         <input type="file" id="import-json" accept=".json" class="hidden" onchange="importJSON(event)"/>
-        <button class="btn btn-danger btn-sm" onclick="if(confirm('¿Borrar todos los datos locales?'))resetData()">🗑️ Reiniciar datos</button>
+        <button class="btn btn-danger btn-sm" onclick="if(confirm('¿Borrar TODOS los datos (local + Supabase)?
+Esta acción no se puede deshacer.'))resetData()">🗑️ Reiniciar datos</button>
       </div>
     </div>
   </div>
@@ -849,7 +850,7 @@ function previewRuleCount(){
   document.getElementById("rule-preview-count").innerHTML=
     count>0
       ?`<b style="color:var(--blue)">${count} activos</b> coinciden con este criterio → se marcarán como <b>${urgLabel[urg]||urg}</b>`
-      :`<span style="color:var(--red)">Sin coincidencias — verifica el texto</span>`;
+      :`<span style="color:var(--orange)">⚠️ Sin coincidencias ahora — la regla se aplicará cuando importes activos de este tipo</span>`;
 }
 function saveModelRule(){
   const match=document.getElementById("rule-match").value.trim();
@@ -1073,7 +1074,20 @@ async function manualSave(){
 }
 function resetData(){
   localStorage.removeItem("bs_it_assets");
-  loadData(); init(); showToast("Datos reiniciados");
+  assets = []; // vider complètement
+  MODEL_RULES = [];
+  saveData();
+  // Pousser données vides vers Supabase immédiatement
+  if(sbUrl && sbKey){
+    clearTimeout(saveData._t);
+    setTimeout(async ()=>{
+      await odPush();
+      showToast("🗑️ Datos borrados — Supabase actualizado");
+    }, 200);
+  } else {
+    showToast("Datos reiniciados");
+  }
+  init();
 }
 function exportCSV(){
   var data=assets.filter(function(a){return a.urgency||a.replStatus;});
@@ -2201,6 +2215,14 @@ function resetKanbanFilters(){
     if(el) el.value="";
   });
   if(renderKanban._pages) renderKanban._pages={};
+  kanbanDoneFilter="all";
+  renderKanban();
+}
+
+let kanbanDoneFilter = "all";
+
+function setKanbanDoneFilter(f){
+  kanbanDoneFilter = f;
   renderKanban();
 }
 
@@ -2215,7 +2237,7 @@ function renderKanban(){
     const depts=[...new Set(assets.filter(a=>a.urgency&&a.sdpStatus==="In Use").map(a=>a.dept).filter(Boolean))].sort();
     depts.forEach(d=>{const o=document.createElement("option");o.value=d;o.textContent=d;deptEl.appendChild(o);});
   }
-  let ka=assets.filter(a=>a.urgency&&a.sdpStatus==="In Use");
+  let ka=assets.filter(a=>(a.urgency&&a.sdpStatus==="In Use")||(a.replStatus&&a.replStatus!=="pending"&&a.replStatus!=="done")||(a.replStatus==="done"));
   if(ft)ka=ka.filter(a=>a.type===ft);
   if(fd)ka=ka.filter(a=>a.dept===fd);
   if(fa==="__none__")ka=ka.filter(a=>!a.assignee);
@@ -2226,7 +2248,13 @@ function renderKanban(){
   document.getElementById("k-pending").textContent=ka.filter(a=>!a.replStatus||a.replStatus==="pending").length;
 
   const cols=PIPELINE.map(col=>{
-    const items=col.k==="pending"?ka.filter(a=>!a.replStatus||a.replStatus==="pending"):ka.filter(a=>a.replStatus===col.k);
+    let items=col.k==="pending"?ka.filter(a=>!a.replStatus||a.replStatus==="pending"):ka.filter(a=>a.replStatus===col.k);
+    // Filtre période pour colonne Completado
+    if(col.k==="done" && kanbanDoneFilter!=="all"){
+      const now=Date.now();
+      const ms=kanbanDoneFilter==="month"?30*24*60*60*1000:365*24*60*60*1000;
+      items=items.filter(a=>a.completedAt&&(now-new Date(a.completedAt).getTime())<ms);
+    }
     const staleCount=items.filter(a=>a.daysInStatus>=(STALE[col.k]||9999)).length;
     return{...col,items,staleCount};
   });
@@ -2268,6 +2296,11 @@ function renderKanban(){
           <div>
             <div style="font-size:13px;font-weight:700;color:${col.color}">${col.icon} ${col.label}</div>
             <div style="font-size:10px;color:${col.color};opacity:.7;margin-top:1px">${col.sub}</div>
+            ${col.k==="done"?`<div style="display:flex;gap:4px;margin-top:6px">
+              <button onclick="setKanbanDoneFilter('all')" style="font-size:10px;padding:2px 7px;border-radius:5px;border:1px solid ${kanbanDoneFilter==='all'?col.color:'rgba(255,255,255,0.3)'};background:${kanbanDoneFilter==='all'?'rgba(255,255,255,0.2)':'transparent'};color:${col.color};cursor:pointer;font-family:inherit;font-weight:600">Todos</button>
+              <button onclick="setKanbanDoneFilter('year')" style="font-size:10px;padding:2px 7px;border-radius:5px;border:1px solid ${kanbanDoneFilter==='year'?col.color:'rgba(255,255,255,0.3)'};background:${kanbanDoneFilter==='year'?'rgba(255,255,255,0.2)':'transparent'};color:${col.color};cursor:pointer;font-family:inherit;font-weight:600">Este año</button>
+              <button onclick="setKanbanDoneFilter('month')" style="font-size:10px;padding:2px 7px;border-radius:5px;border:1px solid ${kanbanDoneFilter==='month'?col.color:'rgba(255,255,255,0.3)'};background:${kanbanDoneFilter==='month'?'rgba(255,255,255,0.2)':'transparent'};color:${col.color};cursor:pointer;font-family:inherit;font-weight:600">Este mes</button>
+            </div>`:""}
           </div>
           <div style="text-align:right">
             <div style="font-size:22px;font-weight:800;color:${col.color};line-height:1">${col.items.length}</div>
@@ -2499,7 +2532,12 @@ function openDrawer(id){
       <textarea rows="3" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:8px 12px;font-size:12px;font-family:inherit;color:var(--text);outline:none;resize:vertical" oninput="updAsset('${escId(id)}',{replNote:this.value})">${escHtml(a.replNote||"")}</textarea>
     </div>
     <div style="display:flex;gap:7px;flex-wrap:wrap">
-      ${!a.replStatus?`<button class="btn btn-primary btn-sm" onclick="iniciarReemplazoDirecto('${escId(id)}')">🎫 Iniciar reemplazo</button>`:""}
+      ${!a.replStatus?`
+        ${!a.urgency?`<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:7px;padding:7px 10px;font-size:11px;color:#C2410C;margin-bottom:6px">
+          ⚠️ Este activo no tiene regla de urgencia configurada en <b>Política de reemplazo</b>. Puedes igualmente iniciar el reemplazo.
+        </div>`:""}
+        <button class="btn btn-primary btn-sm" onclick="iniciarReemplazoDirecto('${escId(id)}')">🎫 Iniciar reemplazo</button>
+      `:""}
       ${a.replStatus&&a.replStatus!=="done"?`<button class="btn btn-success btn-sm" onclick="completarActivo('${escId(id)}')">✅ Completado</button>`:""}
       ${a.replStatus&&a.replStatus!=="ticket"&&a.replStatus!=="pending"?`<button class="btn btn-default btn-sm" onclick="goBackStatus('${escId(id)}');setTimeout(()=>openDrawer('${escId(id)}'),50)">↩ Paso anterior</button>`:""}
       ${a.replStatus&&a.replStatus!=="done"&&a.replStatus!=="pending"?`<button class="btn btn-ghost btn-sm" onclick="advanceStatus('${escId(id)}');setTimeout(()=>openDrawer('${escId(id)}'),50)">→ Siguiente paso</button>`:""}
