@@ -2884,7 +2884,7 @@ async function importRows(rows){
     added++;
   });
   // RÉSULTAT FINAL = exactement les assets du CSV (711)
-  assets=csvAssets.concat(newAssets);
+  assets=csvAssets; // exactement les assets du CSV
   recomputeUrgency();
   saveData();
   // Push immédiat vers Supabase après import
