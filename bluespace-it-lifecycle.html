@@ -976,11 +976,23 @@ const PAGE = 50;
 let renovSort = {col:"urgency", dir:"desc"};
 
 // ── LOAD / SAVE ──
+const KNOWN_STATES=new Set(["In Use","In Store","Stored","Stolen","In Repair","Expired","In Transit","Disposed","Donated","Lost"]);
+
 function cleanFamilyFields(arr){
   const deptSet=new Set(arr.map(a=>a.dept).filter(Boolean));
   return arr.map(a=>{
-    if(a.family&&deptSet.has(a.family)) return {...a,family:""};
-    return a;
+    let fixed={...a};
+    // Fix family = dept name
+    if(fixed.family&&deptSet.has(fixed.family)) fixed.family="";
+    // Fix swapped dept/sdpStatus: if sdpStatus is not a known state but dept looks like a state
+    if(fixed.sdpStatus&&!KNOWN_STATES.has(fixed.sdpStatus)&&KNOWN_STATES.has(fixed.dept)){
+      const tmp=fixed.sdpStatus; fixed.sdpStatus=fixed.dept; fixed.dept=tmp;
+    }
+    // Fix dept = user name (if dept===user and sdpStatus not a known state)
+    if(fixed.dept&&fixed.user&&fixed.dept===fixed.user&&!KNOWN_STATES.has(fixed.sdpStatus)){
+      fixed.dept=""; // Will be re-set on next import
+    }
+    return fixed;
   });
 }
 
@@ -2476,7 +2488,7 @@ function openDrawer(id){
     <div style="margin-bottom:10px">
       <label class="drawer-k" style="display:block;margin-bottom:5px">Nuevo dispositivo</label>
       <input list="model-suggestions" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:8px 12px;font-size:12px;font-family:inherit;color:var(--text);outline:none" placeholder="Modelo previsto" value="${escHtml(a.newDevice||"")}" oninput="updAsset('${escId(id)}',{newDevice:this.value})"/>
-      <datalist id="model-suggestions">${[...new Set(assets.filter(x=>x.sdpStatus==="In Use"&&x.type===a.type).map(x=>x.family||x.product).filter(Boolean))].sort().map(m=>`<option value="${escHtml(m)}">`).join("")}</datalist>
+      <datalist id="model-suggestions">${[...new Set(assets.filter(x=>x.type===a.type&&x.product).map(x=>{const f=(x.family||"").trim();return (f&&f!==x.dept)?f:x.product;}).filter(Boolean))].sort().map(m=>`<option value="${escHtml(m)}">`).join("")}</datalist>
     </div>
     <div style="margin-bottom:10px">
       <label class="drawer-k" style="display:block;margin-bottom:5px">Año de compra</label>
@@ -2740,7 +2752,7 @@ function importRows(rows){
 
   let added=0,updated=0,skip=0;
   // Campos SDP que se actualizan si el activo ya existe
-  const SDP_FIELDS=["user","dept","sdpStatus","product","nom","year","age","gen","family"];
+  const SDP_FIELDS=["user","dept","sdpStatus","product","nom","year","age","gen","family","type"];
   const existingMap=new Map(assets.map(a=>[a.id,a]));
   const newAssets=[];
   rows.forEach(r=>{
