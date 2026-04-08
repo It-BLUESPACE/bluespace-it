@@ -1076,27 +1076,37 @@ function resetData(){
   localStorage.removeItem("bs_it_assets");
   assets = [];
   MODEL_RULES = [];
-  // Bloquer le pull automatique pendant le reset
-  isSyncing = true;
-  saveData();
+  isSyncing = true; // bloquer tout pull pendant le reset
   if(sbUrl && sbKey){
     clearTimeout(saveData._t);
-    // Push immédiat en AWAIT pour s'assurer que Supabase est vidé
     (async ()=>{
       try{
-        await odPush();
-        showToast("🗑️ Datos borrados — Supabase actualizado. Ahora importa tu CSV.", "info", 5000);
+        // Push données vides vers Supabase
+        const sb=initSupabaseClient();
+        if(sb){
+          await sb.from(SB_TABLE).upsert({
+            key:SB_KEY,
+            value:{assets:[], policy:{}, modelRules:[], updatedAt:new Date().toISOString()},
+            updated_at:new Date().toISOString()
+          },{onConflict:"key"});
+        }
+        showToast("🗑️ Datos borrados. Ahora importa tu CSV.", "info", 5000);
       } catch(e){
-        showToast("⚠️ Error al borrar Supabase — inténtalo de nuevo", "error", 4000);
+        showToast("⚠️ Error al borrar — recarga la página e inténtalo de nuevo", "error", 5000);
       } finally{
         isSyncing = false;
-        init(); // init APRÈS le push pour éviter que pull restaure l'ancien état
+        // Rafraîchir l'UI avec 0 assets SANS faire de pull Supabase
+        recomputeUrgency();
+        refreshCurrentView();
+        updateStats();
       }
     })();
   } else {
     isSyncing = false;
     showToast("Datos reiniciados");
-    init();
+    recomputeUrgency();
+    refreshCurrentView();
+    updateStats();
   }
 }
 function exportCSV(){
