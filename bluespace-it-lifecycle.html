@@ -66,7 +66,7 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.3px}
 .badge-gray{background:var(--bg);color:var(--text3);border-color:var(--border)}
 .chip{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:500;background:var(--bg);color:var(--text2)}
 .chip-lt{background:#EBF4FF;color:var(--blue)}
-.chip-mb{background:#F5F3FF;color:var(--purple)}
+.chip-mb{background:#F5F3FF;color:var(--purple)}.chip-tab{background:#F0FDF4;color:#15803D}
 
 /* FILTER BAR */
 .filter-bar{display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
@@ -404,6 +404,7 @@ tr.row-warning td{border-left:3px solid var(--yellow)}
         <option value="">Todos los tipos</option>
         <option value="Laptop">💻 Portátiles</option>
         <option value="Mobile">📱 Móviles</option>
+        <option value="Tablet">📟 Tablets</option>
       </select>
       <select id="f-year" onchange="renderRenovTable()"><option value="">Todos los años</option></select>
       <select id="f-gen" onchange="renderRenovTable()"><option value="">Todas las gen.</option></select>
@@ -442,6 +443,7 @@ tr.row-warning td{border-left:3px solid var(--yellow)}
         <option value="">Todos</option>
         <option value="Laptop">💻 Portátiles</option>
         <option value="Mobile">📱 Móviles</option>
+        <option value="Tablet">📟 Tablets</option>
       </select>
       <div style="margin-left:auto;display:flex;gap:16px;font-size:12px;color:var(--text3)">
         <span>Total pipeline: <b id="k-total" style="color:var(--text)">0</b></span>
@@ -488,14 +490,15 @@ tr.row-warning td{border-left:3px solid var(--yellow)}
       <div><h1>Inventario completo</h1><p class="sub">Todos los portátiles y móviles</p></div>
     </div>
     <div class="filter-bar">
-      <input type="text" id="inv-search" placeholder="🔍  Buscar..." oninput="renderInvTable()"/>
-      <select id="inv-type" onchange="renderInvTable()">
+      <input type="text" id="inv-search" placeholder="🔍  Buscar..." oninput="invPage=1;renderInvTable()"/>
+      <select id="inv-type" onchange="invPage=1;renderInvTable()">
         <option value="">Todos</option>
         <option value="Laptop">💻 Portátiles</option>
         <option value="Mobile">📱 Móviles</option>
+        <option value="Tablet">📟 Tablets</option>
       </select>
-      <select id="inv-dept" onchange="renderInvTable()"><option value="">Todos los dptos.</option></select>
-      <select id="inv-status" onchange="renderInvTable()">
+      <select id="inv-dept" onchange="invPage=1;renderInvTable()"><option value="">Todos los dptos.</option></select>
+      <select id="inv-status" onchange="invPage=1;renderInvTable()">
         <option value="">Todos los estados SDP</option>
         <option value="In Use">En uso</option>
         <option value="In Store">En almacén</option>
@@ -611,6 +614,12 @@ tr.row-warning td{border-left:3px solid var(--yellow)}
         <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end">
           <div>
             <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:5px">Generación / Modelo</label>
+            <div style="display:flex;gap:6px;margin-bottom:7px">
+              <button type="button" id="rf-all"    onclick="setRuleFilter('')"       class="btn btn-primary btn-xs"  style="font-size:11px;border-radius:6px">Todos</button>
+              <button type="button" id="rf-laptop" onclick="setRuleFilter('Laptop')" class="btn btn-default btn-xs" style="font-size:11px;border-radius:6px;border:1px solid var(--border)">💻 Laptop</button>
+              <button type="button" id="rf-mobile" onclick="setRuleFilter('Mobile')" class="btn btn-default btn-xs" style="font-size:11px;border-radius:6px;border:1px solid var(--border)">📱 Móvil</button>
+              <button type="button" id="rf-tablet" onclick="setRuleFilter('Tablet')" class="btn btn-default btn-xs" style="font-size:11px;border-radius:6px;border:1px solid var(--border)">📟 Tablet</button>
+            </div>
             <input type="text" id="rule-match" list="rule-suggestions" placeholder="Ej: G6, G5, Galaxy Jean2, iPhone 13..."
               style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 12px;font-size:12px;font-family:inherit;outline:none"/>
             <datalist id="rule-suggestions"></datalist>
@@ -773,17 +782,55 @@ function getModelUrgency(asset){
   return undefined; // no rule matched — use age-based
 }
 
+function buildRuleSuggestions(){
+  const f = window._ruleFilter||"";
+  const hw = ["Laptop","Mobile","Tablet"];
+  // Gens (Laptop uniquement)
+  const gens = f===""||f==="Laptop"
+    ? [...new Set(assets.filter(a=>a.type==="Laptop"&&a.gen).map(a=>a.gen.trim()))].sort()
+    : [];
+  // Modèles: filtrés par type si sélectionné
+  const typeFilter = f===""?hw:[f];
+  const modelSet = new Set(
+    assets.filter(a=>typeFilter.includes(a.type)&&a.product)
+          .map(a=>a.product.replace(/[​‌‍﻿]/g,"").trim())
+          .filter(p=>p.length>1)
+  );
+  // Fallback tablettes si aucune encore importée
+  if((f===""||f==="Tablet")&&assets.filter(a=>a.type==="Tablet").length===0){
+    ["Galaxy Tab Active4 Pro 5G","Galaxy Tab A8","Galaxy Tab A9","Galaxy Tab A7",
+     "Galaxy Tab A (2016)","Galaxy Tab S7 FE","iPad mini 6th Gen (WiFi+Cellular)"]
+    .forEach(m=>modelSet.add(m));
+  }
+  const models = [...modelSet].sort((a,b)=>a.localeCompare(b));
+  const sugg = [...gens,...models.filter(m=>!gens.includes(m))];
+  document.getElementById("rule-suggestions").innerHTML=sugg.map(s=>`<option value="${escHtml(s)}">`).join("");
+}
+
+function setRuleFilter(f){
+  window._ruleFilter=f;
+  // Update button styles
+  [{id:"rf-all",val:""},{id:"rf-laptop",val:"Laptop"},{id:"rf-mobile",val:"Mobile"},{id:"rf-tablet",val:"Tablet"}]
+  .forEach(({id,val})=>{
+    const b=document.getElementById(id);
+    if(!b)return;
+    b.className=val===f?"btn btn-primary btn-xs":"btn btn-default btn-xs";
+    b.style.cssText=val===f?"font-size:11px;border-radius:6px":"font-size:11px;border-radius:6px;border:1px solid var(--border)";
+  });
+  buildRuleSuggestions();
+  document.getElementById("rule-match").value="";
+  document.getElementById("rule-match").focus();
+}
+
 function addModelRule(){
   const form=document.getElementById("model-rule-form");
   form.classList.remove("hidden");
   document.getElementById("rule-match").value="";
   document.getElementById("rule-urgency").value="critical";
   document.getElementById("rule-preview-count").textContent="";
-  // Populate suggestions
-  const gens=[...new Set(assets.filter(a=>a.gen).map(a=>a.gen))].sort();
-  const families=[...new Set(assets.map(a=>a.family||a.product||"").filter(Boolean))].sort();
-  const sugg=[...gens,...families.slice(0,40)];
-  document.getElementById("rule-suggestions").innerHTML=sugg.map(s=>`<option value="${escHtml(s)}">`).join("");
+  // Lancer buildRuleSuggestions avec filtre "Todos" par défaut
+  window._ruleFilter="";
+  buildRuleSuggestions();
   // Live preview
   document.getElementById("rule-match").oninput=previewRuleCount;
   document.getElementById("rule-match").focus();
@@ -872,7 +919,7 @@ const DEFAULT_POLICY = {
   Laptop: {critical:2, high:1, warning:0},   // offset FROM threshold: critical=thresh+2, high=thresh, warning=thresh-1
   Mobile: {critical:2, high:1, warning:0},
 };
-const DEFAULT_THRESH = {Laptop:4, Mobile:3};
+const DEFAULT_THRESH = {Laptop:4, Mobile:3, Tablet:4};
 let THRESH = {...DEFAULT_THRESH};
 let POLICY = {};  // {Laptop:{thresh:4,critOffset:2,highOffset:1,warnOffset:0}, Mobile:{...}}
 
@@ -929,10 +976,18 @@ const PAGE = 50;
 let renovSort = {col:"urgency", dir:"desc"};
 
 // ── LOAD / SAVE ──
+function cleanFamilyFields(arr){
+  const deptSet=new Set(arr.map(a=>a.dept).filter(Boolean));
+  return arr.map(a=>{
+    if(a.family&&deptSet.has(a.family)) return {...a,family:""};
+    return a;
+  });
+}
+
 function loadData(){
   try {
     const saved = localStorage.getItem("bs_it_assets");
-    if(saved){ assets = JSON.parse(saved); return; }
+    if(saved){ assets = cleanFamilyFields(JSON.parse(saved)); return; }
   } catch(e){}
   assets = SEED.map(a=>({...a, ticket:"", replStatus:null, newDevice:"", replNote:"", daysInStatus:0}));
   saveData();
@@ -1145,7 +1200,7 @@ async function odPull(){
     if(isEditing){ setSyncStatus("ok","🟢 Sincronizado"); setLastSync(); return; }
     if(rec&&Array.isArray(rec.assets)&&rec.assets.length>0){
       // Nettoyer: si assignee sans pipeline actif → vider (données legacy)
-      rec.assets = rec.assets.map(a=>{
+      rec.assets = cleanFamilyFields(rec.assets).map(a=>{
         if(a.assignee && (!a.replStatus || a.replStatus==="pending")) return {...a, assignee:""};
         return a;
       });
@@ -1330,7 +1385,7 @@ function computeFamilyStats(){
 // ── UPDATE ASSET ──
 function addHistory(asset, patch){
   if(!asset) return [];
-  const history = asset.history||[];
+  const history = (asset.history||[]).slice(-49); // max 50 — évite payload énorme
   const who = currentUser?currentUser.email.split("@")[0]:"sistema";
   const when = new Date().toISOString();
   const changes = [];
@@ -1409,8 +1464,8 @@ function initPolicyView(){
 }
 
 function updatePolicyPreview(type){
-  const isLt = type==="Laptop";
-  const id = isLt?"lt":"mb";
+  const isLt = type==="Laptop"; const isTab = type==="Tablet";
+  const id = isLt?"lt":isTab?"tab":"mb";
   const thresh = parseInt(document.getElementById(id+"-thresh").value);
   document.getElementById(id+"-thresh-val").textContent = thresh;
 
@@ -1579,6 +1634,7 @@ function updateReportPreview(){
   const to=document.getElementById("report-to").value;
   const laptops=data.filter(a=>a.type==="Laptop").length;
   const mobiles=data.filter(a=>a.type==="Mobile").length;
+  const tablets=data.filter(a=>a.type==="Tablet").length;
   const byDept={};
   data.forEach(a=>{byDept[a.dept]=(byDept[a.dept]||0)+1;});
   const topDepts=Object.entries(byDept).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([d,n])=>`${d}: ${n}`).join(" · ");
@@ -1600,6 +1656,10 @@ function updateReportPreview(){
       <div style="text-align:center;background:#fff;border-radius:8px;padding:10px;border:1px solid var(--border)">
         <div style="font-size:22px;font-weight:800;color:var(--purple)">📱 ${mobiles}</div>
         <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Móviles</div>
+      </div>
+      <div style="text-align:center;background:#fff;border-radius:8px;padding:10px;border:1px solid var(--border)">
+        <div style="font-size:22px;font-weight:800;color:var(--green)">📟 ${tablets}</div>
+        <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">Tablets</div>
       </div>
     </div>
     ${topDepts?`<div style="font-size:11px;color:var(--text3)">Por departamento: <b>${topDepts}</b></div>`:""}
@@ -1759,7 +1819,7 @@ function renderAsignaciones(){
             <tr style="border-top:1px solid var(--border);cursor:pointer" onclick="openDrawer('${escId(a.id)}')" onmouseover="this.style.background='#F8FAFF'" onmouseout="this.style.background=''">
               <td style="padding:0 3px;background:${stateColor[a.replStatus]};width:3px"></td>
               <td style="padding:10px 16px">
-                <div style="font-size:12px;font-weight:700;color:var(--text)">${a.type==="Laptop"?"💻":"📱"} ${escHtml(a.product.length>32?a.product.slice(0,32)+"…":a.product)}</div>
+                <div style="font-size:12px;font-weight:700;color:var(--text)">${a.type==="Laptop"?"💻":a.type==="Tablet"?"📟":"📱"} ${escHtml(a.product.length>32?a.product.slice(0,32)+"…":a.product)}</div>
                 <div style="font-size:10px;color:var(--text3);font-family:monospace;margin-top:2px">${escHtml(a.id)}</div>
               </td>
               <td style="padding:10px 16px">
@@ -1829,7 +1889,7 @@ function renderAsignaciones(){
             <tr style="border-top:1px solid var(--border);cursor:pointer" onclick="openDrawer('${escId(a.id)}')" onmouseover="this.style.background='#F8FAFF'" onmouseout="this.style.background=''">
               <td style="padding:10px 20px;width:4px;background:${stateColor[a.replStatus]};padding:0 3px"></td>
               <td style="padding:10px 16px">
-                <div style="font-size:12px;font-weight:700;color:var(--text)">${a.type==="Laptop"?"💻":"📱"} ${escHtml(a.product.length>38?a.product.slice(0,38)+"…":a.product)}</div>
+                <div style="font-size:12px;font-weight:700;color:var(--text)">${a.type==="Laptop"?"💻":a.type==="Tablet"?"📟":"📱"} ${escHtml(a.product.length>38?a.product.slice(0,38)+"…":a.product)}</div>
                 <div style="font-size:10px;color:var(--text3);margin-top:2px">${escHtml(a.id)} · ${escHtml(a.user||a.dept)}</div>
               </td>
               <td style="padding:10px 16px">${a.ticket?`<span style="font-size:11px;color:var(--blue);font-weight:600;background:var(--blueLight);padding:2px 8px;border-radius:8px">🎫 ${escHtml(a.ticket)}</span>`:`<span style="color:var(--text3);font-size:11px">Sin ticket</span>`}</td>
@@ -1884,7 +1944,7 @@ function renderDashboard(){
     const remaining=Math.max(0,total-f.inRepl-f.done);
     return`<tr onclick="setFamilyFilter('${escHtml(f.family)}');showView('renovaciones')" style="cursor:pointer">
       <td><div style="font-weight:600">${escHtml(f.family)}</div>${f.gen?`<span style="font-size:10px;color:var(--text3)">Gen. ${f.gen}</span>`:""}${f.year?`<span style="font-size:10px;color:var(--text3);margin-left:6px">${f.year}</span>`:""}</td>
-      <td><span class="chip ${f.type==="Laptop"?"chip-lt":"chip-mb"}">${f.type==="Laptop"?"💻":"📱"} ${f.type}</span></td>
+      <td><span class="chip ${f.type==="Laptop"?"chip-lt":f.type==="Tablet"?"chip-tab":"chip-mb"}">${f.type==="Laptop"?"💻":f.type==="Tablet"?"📟":"📱"} ${f.type}</span></td>
       <td style="font-weight:700">${f.year||"—"}</td>
       <td style="font-weight:600">${f.total}</td>
       <td>${urgBadge(mainUrg)}</td>
@@ -2071,8 +2131,8 @@ function renderRenovTable(){
     const ageVal=a.age!=null?`<span class="${ageClass(a)}">${a.age}a</span>`:"—";
     return`<tr class="${rowCls} ${sel}" onclick="openDrawer('${escId(a.id)}')" style="cursor:pointer">
       <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" ${selIds.has(a.id)?"checked":""} onchange="toggleSel('${escId(a.id)}',this)"/></td>
-      <td><div style="font-weight:600">${a.type==="Laptop"?"💻":"📱"} ${escHtml(a.product)}</div><div style="font-size:10px;color:var(--text3)">${escHtml(a.id)}</div></td>
-      <td><span class="chip ${a.type==="Laptop"?"chip-lt":"chip-mb"}">${a.type==="Laptop"?"Laptop":"Móvil"}</span></td>
+      <td><div style="font-weight:600">${a.type==="Laptop"?"💻":a.type==="Tablet"?"📟":"📱"} ${escHtml(a.product)}</div><div style="font-size:10px;color:var(--text3)">${escHtml(a.id)}</div></td>
+      <td><span class="chip ${a.type==="Laptop"?"chip-lt":a.type==="Tablet"?"chip-tab":"chip-mb"}">${a.type==="Laptop"?"Laptop":a.type==="Tablet"?"Tablet":"Móvil"}</span></td>
       <td style="color:var(--blue);font-weight:500;font-size:12px">${escHtml(a.dept)}</td>
       <td style="color:var(--text2);font-size:12px">${escHtml(a.user)||"—"}</td>
       <td style="font-weight:700">${a.year||`<span style="color:var(--text3)">—</span>`}</td>
@@ -2219,7 +2279,7 @@ function renderKanban(){
               <span style="font-size:11px;font-weight:700;color:var(--text2);font-family:monospace">${escHtml(a.id)}</span>
               ${a.daysInStatus>0&&col.k!=="done"&&col.k!=="pending"?`<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:${a.daysInStatus>=(STALE[col.k]||9999)?"var(--redBg)":a.daysInStatus>=(STALE[col.k]||9999)*.7?"var(--orangeBg)":"var(--bg)"};color:${a.daysInStatus>=(STALE[col.k]||9999)?"var(--red)":a.daysInStatus>=(STALE[col.k]||9999)*.7?"var(--orange)":"var(--text3)"}">${a.daysInStatus}d</span>`:""}
             </div>
-            <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:3px;line-height:1.3">${a.type==="Laptop"?"💻":"📱"} ${escHtml(a.product.length>30?a.product.slice(0,30)+"…":a.product)}</div>
+            <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:3px;line-height:1.3">${a.type==="Laptop"?"💻":a.type==="Tablet"?"📟":"📱"} ${escHtml(a.product.length>30?a.product.slice(0,30)+"…":a.product)}</div>
             <div style="font-size:11px;color:var(--text3);margin-bottom:6px">${a.user?escHtml(a.user.split(" ").slice(0,2).join(" ")):escHtml(a.dept)}</div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
               ${a.year?`<span style="font-size:10px;color:var(--text3);background:var(--bg);padding:1px 6px;border-radius:8px;font-weight:500">📅 ${a.year}</span>`:""}
@@ -2303,12 +2363,23 @@ function renderInvTable(){
   const totalPages=Math.max(1,Math.ceil(d.length/PAGE));
   if(invPage>totalPages)invPage=1;
   const pageData=d.slice((invPage-1)*PAGE,invPage*PAGE);
-  document.getElementById("inv-count").innerHTML=`<b style="color:var(--text)">${d.length}</b> activos`;
+  const invTotal=d.length;
+  const invPages=Math.max(1,Math.ceil(invTotal/PAGE));
+  if(invPage>invPages)invPage=1;
+  document.getElementById("inv-count").innerHTML=`<b style="color:var(--text)">${invTotal}</b> activos`;
+  const navEl=document.getElementById("inv-nav");
+  if(navEl){
+    navEl.innerHTML=invPages>1?`
+      <button class="btn btn-ghost btn-xs" onclick="invPage=Math.max(1,invPage-1);renderInvTable()" ${invPage<=1?'disabled':''}>◀</button>
+      <span style="color:var(--text3)">${invPage}/${invPages}</span>
+      <button class="btn btn-ghost btn-xs" onclick="invPage=Math.min(${invPages},invPage+1);renderInvTable()" ${invPage>=invPages?'disabled':''}>▶</button>
+    `:"";
+  }
   document.getElementById("inv-tbody").innerHTML=pageData.map(a=>`
     <tr onclick="openDrawer('${escId(a.id)}')" style="cursor:pointer">
       <td style="font-size:11px;color:var(--text3);font-family:monospace">${escHtml(a.id)}</td>
-      <td><div style="font-weight:600">${a.type==="Laptop"?"💻":"📱"} ${escHtml(a.product)}</div></td>
-      <td><span class="chip ${a.type==="Laptop"?"chip-lt":"chip-mb"}">${a.type==="Laptop"?"Laptop":"Móvil"}</span></td>
+      <td><div style="font-weight:600">${a.type==="Laptop"?"💻":a.type==="Tablet"?"📟":"📱"} ${escHtml(a.product)}</div></td>
+      <td><span class="chip ${a.type==="Laptop"?"chip-lt":a.type==="Tablet"?"chip-tab":"chip-mb"}">${a.type==="Laptop"?"Laptop":a.type==="Tablet"?"Tablet":"Móvil"}</span></td>
       <td style="color:var(--blue);font-weight:500;font-size:12px">${escHtml(a.dept)}</td>
       <td style="font-size:12px;color:var(--text2)">${escHtml(a.user)||"—"}</td>
       <td style="font-weight:700">${a.year||"—"}</td>
@@ -2345,7 +2416,7 @@ function openDrawer(id){
     <div style="padding:20px 24px 16px;background:linear-gradient(135deg,#F0F7FF 0%,#fff 100%);border-bottom:1px solid #E8F0FE">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;padding-right:30px">
         <div>
-          <div style="font-size:14px;font-weight:800;color:#0F172A;margin-bottom:2px">${a.type==="Laptop"?"💻":"📱"} ${escHtml(a.product)}</div>
+          <div style="font-size:14px;font-weight:800;color:#0F172A;margin-bottom:2px">${a.type==="Laptop"?"💻":a.type==="Tablet"?"📟":"📱"} ${escHtml(a.product)}</div>
           <div style="font-size:11px;color:#64748B;font-weight:500">${escHtml(a.nom)}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
@@ -2608,8 +2679,33 @@ function importRows(rows){
     }
     for(const k of["iPhone 17","iPhone 16","iPhone 15","iPhone 14","iPhone 13","iPhone 12","iPhone 11"]){if(p.includes(k))return k;}
     if(/Nokia G50/i.test(p))return"Nokia G50";if(/Nokia 2\.4/i.test(p))return"Nokia 2.4";
-    if(/Galaxy Jean2/i.test(p))return"Galaxy Jean2";if(/Galaxy A15/i.test(p))return"Galaxy A15 5G";if(/Galaxy A16/i.test(p))return"Galaxy A16 5G";if(/Galaxy A13/i.test(p))return"Galaxy A13 5G";
-    return p.slice(0,35);
+    // Galaxy mobiles
+    if(/Galaxy Jean2/i.test(p))return"Galaxy Jean2";
+    if(/Galaxy A35/i.test(p))return"Galaxy A35 5G";if(/Galaxy A34/i.test(p))return"Galaxy A34 5G";
+    if(/Galaxy A23/i.test(p))return"Galaxy A23 5G";if(/Galaxy A22/i.test(p))return"Galaxy A22";
+    if(/Galaxy A21s/i.test(p))return"Galaxy A21s";if(/Galaxy A16/i.test(p))return"Galaxy A16 5G";
+    if(/Galaxy A15/i.test(p))return"Galaxy A15 5G";if(/Galaxy A14 5G/i.test(p))return"Galaxy A14 5G";
+    if(/Galaxy A14/i.test(p))return"Galaxy A14";if(/Galaxy A13 5G/i.test(p))return"Galaxy A13 5G";
+    if(/Galaxy A13/i.test(p))return"Galaxy A13";
+    // Galaxy tablettes
+    if(/Galaxy Tab Active4/i.test(p))return"Galaxy Tab Active4 Pro 5G";
+    if(/Galaxy Tab S7/i.test(p))return"Galaxy Tab S7 FE";
+    if(/Galaxy Tab A8/i.test(p))return"Galaxy Tab A8";if(/Galaxy Tab A9/i.test(p))return"Galaxy Tab A9";
+    if(/Galaxy Tab A7/i.test(p))return"Galaxy Tab A7";if(/Galaxy Tab A/i.test(p))return"Galaxy Tab A";
+    // iPad
+    if(/iPad mini/i.test(p))return"iPad mini 6th Gen";if(/iPad/i.test(p))return"iPad";
+    // Other phones
+    if(/Nokia G50/i.test(p))return"Nokia G50";if(/Nokia 2\.4/i.test(p))return"Nokia 2.4";
+    if(/Nokia 3310/i.test(p))return"Nokia 3310";
+    if(/HUAWEI|Huawei/i.test(p))return p.replace(/[\u200B\u200C]/g,"").trim().slice(0,30);
+    if(/SM-A176B/i.test(p))return"Samsung A17k";if(/SM-A202F/i.test(p))return"Samsung A21s";
+    if(/SM-A366B/i.test(p))return"Samsung A34";
+    if(/PRA-LX1/i.test(p))return"Huawei PRA-LX1";if(/P8 lite/i.test(p))return"Huawei P8 lite";
+    if(/iPhone17|iPhone 17/i.test(p))return"iPhone 17";if(/iPhone12,1/i.test(p))return"iPhone 11";
+    if(/iPhone10,4/i.test(p))return"iPhone 8";
+    // Alcatel
+    if(/Alcatel/i.test(p))return p.slice(0,25);
+    return p.replace(/[\u200B\u200C\u200D]/g,"").slice(0,35);
   }
 
   // ── VALIDATION DU FICHIER ──
@@ -2633,7 +2729,7 @@ function importRows(rows){
   if(!hasDept){
     console.warn("Import: colonne département non trouvée — vérifié que es un export SDP");
   }
-  const nomKey=Object.keys(rows[0]||{}).find(k=>k.includes("Nom")||k.includes("Name")||k==="Nom")||"Nom";
+  const nomKey=Object.keys(rows[0]||{}).find(k=>k==="Nom"||k==="Name"||k==="Asset Name")||Object.keys(rows[0]||{}).find(k=>k.startsWith("Nom")||k.startsWith("Name"))||"Nom";
   const prodKey=Object.keys(rows[0]||{}).find(k=>k.includes("produit")||k.includes("Product")||k.includes("Produit"))||"Produit.Nom du produit";
   const typeKey=Object.keys(rows[0]||{}).find(k=>k.includes("Type de produit")||k.includes("Type"))||"Type de produit.Type de produit";
   const deptKey=Object.keys(rows[0]||{}).find(k=>k.includes("partement")||k.includes("Department"))||"Département.Nom";
@@ -2653,11 +2749,12 @@ function importRows(rows){
     const prefix=nom.split("(")[0].trim();
     const isLT=prefix.startsWith("LT");
     const isMB=prefix.startsWith("MB");
-    if(!isLT&&!isMB){skip++;return;}
+    const isTAB=prefix.startsWith("TAB");
+    if(!isLT&&!isMB&&!isTAB){skip++;return;}
     const id=tag||prefix;
     const prod=(r[prodKey]||"").replace(/[\u200b\u200c\u200d\ufeff​]+/g,"").trim();
     const yr=inferYearLocal(prod);
-    const type=isLT?"Laptop":"Mobile";
+    const type=isLT?"Laptop":isTAB?"Tablet":"Mobile";
     const age=yr?CY2-yr:null;
     const newUser=(r[userKey]||"").trim();
     const newDept=(r[deptKey]||"(Sin departamento)").trim();
