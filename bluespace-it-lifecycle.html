@@ -2720,6 +2720,7 @@ function importCSV(text){
 }
 function importRows(rows){
   const CY2=new Date().getFullYear();
+  isSyncing = true; // Bloquer le pull auto pendant l'import
 
   const GEN_Y={"G1":2014,"G2":2015,"G3":2016,"G4":2017,"G5":2018,"G6":2020,"G7":2021,"G8":2022,"G9":2023,"G10":2023,"G11":2024};
   function inferYearLocal(p){
@@ -2857,7 +2858,15 @@ function importRows(rows){
   recomputeUrgency();
   saveData();
   // Push immédiat vers Supabase après import
-  if(sbUrl&&sbKey){ clearTimeout(saveData._t); setTimeout(odPush, 200); }
+  if(sbUrl&&sbKey){
+    clearTimeout(saveData._t);
+    setTimeout(async ()=>{
+      await odPush();
+      isSyncing = false; // Débloquer le pull après push confirmé
+    }, 200);
+  } else {
+    isSyncing = false;
+  }
   init();
   const res=document.getElementById("import-result");
   res.classList.remove("hidden");
