@@ -525,6 +525,7 @@ tr.row-warning td{border-left:3px solid var(--yellow)}
     <div class="card">
       <div class="card-title">📂 Cargar archivo Excel (.xlsx / .csv)</div>
       <div class="card-sub">Se importarán los activos LT (portátiles), MB (móviles) y TAB (tablets). Los duplicados se detectan automáticamente por ID.</div>
+
       <div class="import-zone" id="drop-zone" onclick="document.getElementById('file-input').click()" ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
         <div class="import-zone-icon">📊</div>
         <div class="import-zone-text">Arrastra tu Excel aquí o haz clic para seleccionar</div>
@@ -562,8 +563,7 @@ tr.row-warning td{border-left:3px solid var(--yellow)}
         <button class="btn btn-default btn-sm" onclick="exportData()">⬇️ Exportar datos (JSON)</button>
         <button class="btn btn-default btn-sm" onclick="document.getElementById('import-json').click()">⬆️ Importar datos (JSON)</button>
         <input type="file" id="import-json" accept=".json" class="hidden" onchange="importJSON(event)"/>
-        <button class="btn btn-danger btn-sm" onclick="if(confirm('¿Borrar TODOS los datos (local + Supabase)?
-Esta acción no se puede deshacer.'))resetData()">🗑️ Reiniciar datos</button>
+        <button class="btn btn-danger btn-sm" onclick="if(confirm('¿Borrar TODOS los datos (local + Supabase)? Esta acción no se puede deshacer.'))resetData()">🗑️ Reiniciar datos</button>
       </div>
     </div>
   </div>
@@ -1074,20 +1074,30 @@ async function manualSave(){
 }
 function resetData(){
   localStorage.removeItem("bs_it_assets");
-  assets = []; // vider complètement
+  assets = [];
   MODEL_RULES = [];
+  // Bloquer le pull automatique pendant le reset
+  isSyncing = true;
   saveData();
-  // Pousser données vides vers Supabase immédiatement
   if(sbUrl && sbKey){
     clearTimeout(saveData._t);
-    setTimeout(async ()=>{
-      await odPush();
-      showToast("🗑️ Datos borrados — Supabase actualizado");
-    }, 200);
+    // Push immédiat en AWAIT pour s'assurer que Supabase est vidé
+    (async ()=>{
+      try{
+        await odPush();
+        showToast("🗑️ Datos borrados — Supabase actualizado. Ahora importa tu CSV.", "info", 5000);
+      } catch(e){
+        showToast("⚠️ Error al borrar Supabase — inténtalo de nuevo", "error", 4000);
+      } finally{
+        isSyncing = false;
+        init(); // init APRÈS le push pour éviter que pull restaure l'ancien état
+      }
+    })();
   } else {
+    isSyncing = false;
     showToast("Datos reiniciados");
+    init();
   }
-  init();
 }
 function exportCSV(){
   var data=assets.filter(function(a){return a.urgency||a.replStatus;});
@@ -1375,7 +1385,8 @@ function replBadge(s){
   return`<span class="badge" style="background:${p.bg};color:${p.color};border-color:${p.border}">${p.icon} ${p.label}</span>`;
 }
 function sdpLabel(s){
-  const m={"In Use":"En uso","In Store":"En almacén","Disposed":"Dado de baja","Stolen":"Robado","Expired":"Expirado","In Repair":"En reparación"};
+  if(!s||s==="undefined"||s==="null") return "—";
+  const m={"In Use":"En uso","In Store":"En almacén","Disposed":"Dado de baja","Stolen":"Robado","Expired":"Expirado","In Repair":"En reparación","In Transit":"En tránsito"};
   return m[s]||s;
 }
 
@@ -2709,6 +2720,7 @@ function importCSV(text){
 }
 function importRows(rows){
   const CY2=new Date().getFullYear();
+
   const GEN_Y={"G1":2014,"G2":2015,"G3":2016,"G4":2017,"G5":2018,"G6":2020,"G7":2021,"G8":2022,"G9":2023,"G10":2023,"G11":2024};
   function inferYearLocal(p){
     if(!p)return null;
