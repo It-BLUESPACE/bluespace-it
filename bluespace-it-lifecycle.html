@@ -2,6 +2,9 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Bluespace — IT Lifecycle</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -322,7 +325,7 @@ tr.row-warning td{border-left:3px solid var(--yellow)}
       <span id="save-badge" style="display:none;background:#fff;color:var(--orange);font-size:10px;font-weight:800;padding:1px 6px;border-radius:10px"></span>
     </button>
     <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:10px;color:var(--text3)">
-      <span><span id="asset-count">0</span> activos · <span style="color:var(--text3);font-size:10px">v2.4</span></span>
+      <span><span id="asset-count">0</span> activos · <span style="color:var(--text3);font-size:10px">v2.5-04081611</span></span>
       <span id="today-date"></span>
     </div>
   </div>
@@ -2726,365 +2729,116 @@ function importCSV(text){
     headers.forEach((h,idx)=>{row[h]=(vals[idx]||"").replace(/^"|"$/g,"").trim();});
     rows.push(row);
   }
-  importRows(rows).catch(e=>console.error("Import error:",e));
+  importRows(rows);
 }
-async function importRows(rows){
-  const CY2=new Date().getFullYear();
-  isSyncing = true; // Bloquer le pull auto pendant l'import
+function importRows(rows){
+  if(!rows||rows.length===0){ showToast("❌ Archivo vacío","error",4000); return; }
 
-  // Charger les données actuelles depuis Supabase directement
-  // pour éviter tout problème avec des données locales obsolètes
-  if(sbUrl && sbKey){
-    try{
-      const sb=initSupabaseClient();
-      if(sb){
-        const {data} = await sb.from(SB_TABLE).select("value").eq("key",SB_KEY).single();
-        if(data && data.value && Array.isArray(data.value.assets)){
-          assets = data.value.assets; // Utiliser les données Supabase fraîches
-        }
-      }
-    }catch(e){ /* Si Supabase vide ou erreur → garder assets actuels */ }
-  }
+  // ── Détection colonnes ──
+  const cols=Object.keys(rows[0]);
+  const nomKey  = cols.find(k=>k==="Nom"||k==="Name")||cols.find(k=>k.startsWith("Nom")||k.startsWith("Name"))||"Nom";
+  const prodKey = cols.find(k=>k.includes("produit")||k.includes("Product"))||"Produit.Nom du produit";
+  const deptKey = cols.find(k=>k.includes("partement")||k.includes("Department"))||"Département.Nom";
+  const userKey = cols.find(k=>k.includes("tilisateur")||(k.includes("User")&&!k.includes("Issue")))||"Utilisateur.Nom";
+  const stateKey= cols.find(k=>k.includes("tat")||k.includes("State")||k.includes("Status"))||"État.État de l'actif";
+  const noteKey = cols.find(k=>k.includes("COMENTARIOS")||k.includes("Notes"))||"COMENTARIOS";
 
-  const GEN_Y={"G1":2014,"G2":2015,"G3":2016,"G4":2017,"G5":2018,"G6":2020,"G7":2021,"G8":2022,"G9":2023,"G10":2023,"G11":2024};
-  function inferYearLocal(p){
-    if(!p)return null;
-    if(/iPhone 17/i.test(p))return 2025;if(/iPhone 16/i.test(p))return 2024;if(/iPhone 15/i.test(p))return 2023;if(/iPhone 14/i.test(p))return 2022;if(/iPhone 13/i.test(p))return 2021;if(/iPhone 12/i.test(p)||/iPhone12/i.test(p))return 2020;if(/iPhone 11/i.test(p))return 2019;
-    if(/Nokia G50/i.test(p))return 2021;if(/Nokia 2\.4/i.test(p))return 2020;
-    if(/Galaxy Jean2/i.test(p))return 2020;if(/Galaxy A15/i.test(p))return 2024;if(/Galaxy A16/i.test(p))return 2024;if(/Galaxy A13/i.test(p))return 2022;
-    if(/ProOne 600G4/i.test(p))return 2017;if(/ProOne 600 G6 22/i.test(p))return 2022;if(/ProOne 600 G6/i.test(p))return 2021;if(/ProOne 440 23\.8 G9/i.test(p))return 2023;if(/ProOne 400G5/i.test(p))return 2018;
-    const m=p.match(/\bG(\d{1,2})\b/i);if(m)return GEN_Y["G"+m[1].toUpperCase()]||null;
-    return null;
-  }
-  function getGenLocal(p){const m=(p||"").match(/\b(G\d{1,2})\b/i);return m?m[1].toUpperCase():null;}
-  function getFamLocal(p,type){
-    p=p||"";
-    const gen=getGenLocal(p);
-    if(gen&&/HP|EliteBook|Elite|ProBook|ProOne/i.test(p)){
-      const base=p.replace(new RegExp("\\s*\\b"+gen+"\\b.*","i"),"").replace(/\s+/g," ").trim();
-      return base+" "+gen;
+  if(!cols.includes(nomKey)){ showToast("❌ Formato no reconocido","error",5000); return; }
+
+  isSyncing = true; // bloquer pull auto
+
+  // ── Sauvegarder données pipeline actuelles (tickets, assignees…) ──
+  const pipeline={};
+  assets.forEach(a=>{
+    if(a.ticket||a.replStatus||a.assignee||a.notes){
+      pipeline[a.id]={
+        ticket:a.ticket||"", replStatus:a.replStatus||null,
+        assignee:a.assignee||"", newDevice:a.newDevice||"",
+        replNote:a.replNote||"", daysInStatus:a.daysInStatus||0,
+        completedAt:a.completedAt||null, history:a.history||[]
+      };
     }
-    for(const k of["iPhone 17","iPhone 16","iPhone 15","iPhone 14","iPhone 13","iPhone 12","iPhone 11"]){if(p.includes(k))return k;}
-    if(/Nokia G50/i.test(p))return"Nokia G50";if(/Nokia 2\.4/i.test(p))return"Nokia 2.4";
-    // Galaxy mobiles
-    if(/Galaxy Jean2/i.test(p))return"Galaxy Jean2";
-    if(/Galaxy A35/i.test(p))return"Galaxy A35 5G";if(/Galaxy A34/i.test(p))return"Galaxy A34 5G";
-    if(/Galaxy A23/i.test(p))return"Galaxy A23 5G";if(/Galaxy A22/i.test(p))return"Galaxy A22";
-    if(/Galaxy A21s/i.test(p))return"Galaxy A21s";if(/Galaxy A16/i.test(p))return"Galaxy A16 5G";
-    if(/Galaxy A15/i.test(p))return"Galaxy A15 5G";if(/Galaxy A14 5G/i.test(p))return"Galaxy A14 5G";
-    if(/Galaxy A14/i.test(p))return"Galaxy A14";if(/Galaxy A13 5G/i.test(p))return"Galaxy A13 5G";
-    if(/Galaxy A13/i.test(p))return"Galaxy A13";
-    // Galaxy tablettes
-    if(/Galaxy Tab Active4/i.test(p))return"Galaxy Tab Active4 Pro 5G";
-    if(/Galaxy Tab S7/i.test(p))return"Galaxy Tab S7 FE";
-    if(/Galaxy Tab A8/i.test(p))return"Galaxy Tab A8";if(/Galaxy Tab A9/i.test(p))return"Galaxy Tab A9";
-    if(/Galaxy Tab A7/i.test(p))return"Galaxy Tab A7";if(/Galaxy Tab A/i.test(p))return"Galaxy Tab A";
-    // iPad
-    if(/iPad mini/i.test(p))return"iPad mini 6th Gen";if(/iPad/i.test(p))return"iPad";
-    // Other phones
-    if(/Nokia G50/i.test(p))return"Nokia G50";if(/Nokia 2\.4/i.test(p))return"Nokia 2.4";
-    if(/Nokia 3310/i.test(p))return"Nokia 3310";
-    if(/HUAWEI|Huawei/i.test(p))return p.replace(/[\u200B\u200C]/g,"").trim().slice(0,30);
-    if(/SM-A176B/i.test(p))return"Samsung A17k";if(/SM-A202F/i.test(p))return"Samsung A21s";
-    if(/SM-A366B/i.test(p))return"Samsung A34";
-    if(/PRA-LX1/i.test(p))return"Huawei PRA-LX1";if(/P8 lite/i.test(p))return"Huawei P8 lite";
-    if(/iPhone17|iPhone 17/i.test(p))return"iPhone 17";if(/iPhone12,1/i.test(p))return"iPhone 11";
-    if(/iPhone10,4/i.test(p))return"iPhone 8";
-    // Alcatel
-    if(/Alcatel/i.test(p))return p.slice(0,25);
-    return p.replace(/[\u200B\u200C\u200D]/g,"").slice(0,35);
+  });
+
+  // ── Construire les assets depuis le CSV ──
+  const CY2=new Date().getFullYear();
+  const GEN_Y={"G1":2014,"G2":2015,"G3":2016,"G4":2017,"G5":2018,"G6":2020,"G7":2021,"G8":2022,"G9":2023,"G10":2023,"G11":2024};
+  function getGen(p){const m=(p||"").match(/\b(G\d{1,2})\b/i);return m?m[1].toUpperCase():null;}
+  function inferYr(p){
+    if(!p)return null;
+    if(/iPhone 17/i.test(p))return 2025;if(/iPhone 16/i.test(p))return 2024;
+    if(/iPhone 15/i.test(p))return 2023;if(/iPhone 14/i.test(p))return 2022;
+    if(/iPhone 13/i.test(p))return 2021;if(/iPhone12/i.test(p)||/iPhone 12/i.test(p))return 2020;
+    if(/iPhone 11/i.test(p))return 2019;
+    const g=getGen(p); if(g&&GEN_Y[g])return GEN_Y[g]; return null;
   }
 
-  // ── VALIDATION DU FICHIER ──
-  if(!rows || rows.length===0){
-    showToast("❌ Archivo vacío o formato no válido","error",4000);
-    return;
-  }
-  const firstRow = rows[0]||{};
-  const cols = Object.keys(firstRow);
-  // Vérifier que les colonnes clés sont présentes
-  const hasNom = cols.some(k=>k.includes("Nom")||k.includes("Name"));
-  const hasProd = cols.some(k=>k.includes("produit")||k.includes("Product")||k.includes("Produit"));
-  const hasDept = cols.some(k=>k.toLowerCase().includes("dept")||k.toLowerCase().includes("service"));
-  if(!hasNom){
-    const res=document.getElementById("import-result");
-    if(res){res.classList.remove("hidden");res.innerHTML=`<span style="color:var(--red)">❌ Formato no reconocido — columna "Nom" no encontrada.<br>Verifica que sea un export de ServiceDesk Plus.</span>`;}
-    showToast("❌ Formato no reconocido","error",5000);
-    return;
-  }
-  // Aviso si faltan columnas esperadas
-  if(!hasDept){
-    console.warn("Import: colonne département non trouvée — vérifié que es un export SDP");
-  }
-  const nomKey=Object.keys(rows[0]||{}).find(k=>k==="Nom"||k==="Name"||k==="Asset Name")||Object.keys(rows[0]||{}).find(k=>k.startsWith("Nom")||k.startsWith("Name"))||"Nom";
-  const prodKey=Object.keys(rows[0]||{}).find(k=>k.includes("produit")||k.includes("Product")||k.includes("Produit"))||"Produit.Nom du produit";
-  const typeKey=Object.keys(rows[0]||{}).find(k=>k.includes("Type de produit")||k.includes("Type"))||"Type de produit.Type de produit";
-  const deptKey=Object.keys(rows[0]||{}).find(k=>k.includes("partement")||k.includes("Department"))||"Département.Nom";
-  const userKey=Object.keys(rows[0]||{}).find(k=>k.includes("tilisateur")||k.includes("User")||k.includes("Utilisateur"))||"Utilisateur.Nom";
-  const stateKey=Object.keys(rows[0]||{}).find(k=>k.includes("tat")||k.includes("State")||k.includes("Status"))||"État.État de l'actif";
-  const tagKey=Object.keys(rows[0]||{}).find(k=>k.includes("tiquette")||k.includes("Tag")||k.includes("Asset tag"))||"Étiquette de l'actif";
-  const noteKey=Object.keys(rows[0]||{}).find(k=>k.includes("COMENT")||k.includes("Note")||k.includes("comment"))||"COMENTARIOS";
+  const freshAssets=[];
+  let added=0, updated=0, skip=0;
 
-  let added=0,updated=0,skip=0;
-  // Campos SDP que se actualizan si el activo ya existe
-  const SDP_FIELDS=["user","dept","sdpStatus","product","nom","year","age","gen","family","type"];
-  // Construction d'une map des données pipeline actuelles (tickets, assignaciones etc.)
-  // On préserve ces données mais le résultat final sera EXACTEMENT les assets du CSV
-  const pipelineMap=new Map(assets.map(a=>[a.id,{
-    ticket:a.ticket||"", replStatus:a.replStatus||null, assignee:a.assignee||"",
-    newDevice:a.newDevice||"", replNote:a.replNote||"", daysInStatus:a.daysInStatus||0,
-    completedAt:a.completedAt||null, history:a.history||[], urgency:a.urgency||null
-  }]));
-  const csvAssets=[]; // contiendra EXACTEMENT les assets du CSV
   rows.forEach(r=>{
-    const nom=(r[nomKey]||"").trim();
-    const tag=(r[tagKey]||"").trim();
+    const nom=(r[nomKey]||"").replace(/[\u200B\u200C\u200D\uFEFF]/g,"").trim();
     const prefix=nom.split("(")[0].trim();
     const isLT=prefix.startsWith("LT");
     const isMB=prefix.startsWith("MB");
     const isTAB=prefix.startsWith("TAB");
     if(!isLT&&!isMB&&!isTAB){skip++;return;}
-    const id=tag||prefix;
-    const prod=(r[prodKey]||"").replace(/[\u200b\u200c\u200d\ufeff​]+/g,"").trim();
-    const yr=inferYearLocal(prod);
+
+    const id=prefix;
+    const prod=(r[prodKey]||"").replace(/[\u200B\u200C\u200D\uFEFF]/g,"").trim();
+    const dept=(r[deptKey]||"").trim();
+    const user=(r[userKey]||"").trim();
+    const state=(r[stateKey]||"In Use").trim();
+    const notes=(r[noteKey]||"").replace(/\n/g," ").trim();
     const type=isLT?"Laptop":isTAB?"Tablet":"Mobile";
+    const yr=inferYr(prod);
     const age=yr?CY2-yr:null;
-    const newUser=(r[userKey]||"").trim();
-    const newDept=(r[deptKey]||"(Sin departamento)").trim();
-    const newStatus=(r[stateKey]||"In Use").trim();
-    if(existingMap.has(id)){
-      // Activo ya existe — actualizar solo campos SDP, conservar datos IT
-      const existing=existingMap.get(id);
-      const userChanged=existing.user!==newUser&&newUser;
-      // Update en el Map directamente (O(1) en lugar de O(n))
-      const ex = existingMap.get(id);
-      const importPatch = {
-        nom, product:prod, year:yr, age,
-        gen:getGenLocal(prod), family:getFamLocal(prod,type),
-        user:newUser||ex.user,
-        dept:newDept||ex.dept,
-        sdpStatus:newStatus||ex.sdpStatus,
-        type  // corrige le type si changé (ex: Mobile→Tablet pour TAB)
-      };
-      const importHistory = userChanged ? addHistory(ex, {user:newUser, dept:newDept}) : ex.history||[];
-      existingMap.set(id, {...ex, ...importPatch, history:importHistory});
-      const typeChanged = type !== ex.type;
-      if(userChanged || typeChanged) updated++;
-      return;
-    }
-    // Activo nuevo
-    csvAssets.push({
-      id,nom,product:prod,type,
-      dept:newDept,user:newUser,sdpStatus:newStatus,
-      notes:(r[noteKey]||"").replace(/\n/g," ").trim(),
-      year:yr,age,urgency:null,gen:getGenLocal(prod),family:getFamLocal(prod,type),
-      ticket:"",replStatus:null,assignee:"",newDevice:"",replNote:"",daysInStatus:0,
-      history:[]
+    const gen=getGen(prod);
+
+    // Récupérer données pipeline si l'actif existait
+    const pipe=pipeline[id]||{};
+    const wasUpdated=!!Object.keys(pipe).length;
+    if(wasUpdated) updated++;
+    else added++;
+
+    freshAssets.push({
+      id, nom, product:prod, type,
+      dept, user, sdpStatus:state, notes,
+      year:yr, age, gen, family:"",
+      urgency:null,
+      ticket:pipe.ticket||"",
+      replStatus:pipe.replStatus||null,
+      assignee:pipe.assignee||"",
+      newDevice:pipe.newDevice||"",
+      replNote:pipe.replNote||"",
+      daysInStatus:pipe.daysInStatus||0,
+      completedAt:pipe.completedAt||null,
+      history:pipe.history||[]
     });
-    added++;
   });
-  // RÉSULTAT FINAL = exactement les assets du CSV (711)
-  assets=csvAssets; // exactement les assets du CSV
+
+  // ── Remplacer assets — TOUJOURS exactement le nombre du CSV ──
+  assets=freshAssets;
   recomputeUrgency();
   saveData();
-  // Push immédiat vers Supabase après import
+
+  // Push immédiat vers Supabase
+  clearTimeout(saveData._t);
   if(sbUrl&&sbKey){
-    clearTimeout(saveData._t);
-    setTimeout(async ()=>{
-      await odPush();
-      isSyncing = false; // Débloquer le pull après push confirmé
-    }, 200);
+    setTimeout(()=>{ odPush().finally(()=>{ isSyncing=false; }); }, 100);
   } else {
-    isSyncing = false;
+    isSyncing=false;
   }
+
   init();
+
+  // Afficher résultat
   const res=document.getElementById("import-result");
-  res.classList.remove("hidden");
-  // Aviso si >80% de filas ignoradas
-  const totalRows = rows.length;
-  if(totalRows > 10 && skip/totalRows > 0.8){
-    showToast(`⚠️ ${Math.round(skip/totalRows*100)}% de filas ignoradas — verifica el formato del archivo`, "error", 6000);
+  if(res){
+    res.classList.remove("hidden");
+    res.innerHTML=`✅ <b>${added}</b> activos añadidos · <b>${updated}</b> con pipeline preservado · <b>${skip}</b> otros tipos ignorados`;
   }
-  res.innerHTML=`✅ <b>${added}</b> activos añadidos · <b>${updated}</b> actualizados (usuario/dpto) · <b>${skip}</b> otros tipos ignorados`;
-  showToast(`${added} activos importados`);
+  showToast(`✅ ${freshAssets.length} activos importados correctamente`,"info",4000);
 }
 
-// ── UTILS ──
-function escHtml(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
-function escId(s){return String(s||"").replace(/'/g,"\\'");}
-function renderPagination(containerId,currentPage,totalPages,onPage){
-  const el=document.getElementById(containerId);
-  if(totalPages<=1){el.innerHTML="";return;}
-  let html=`<button class="btn btn-default btn-sm" ${currentPage===1?"disabled":""} onclick="(${onPage})(${currentPage-1})">‹ Anterior</button>`;
-  for(let i=1;i<=Math.min(7,totalPages);i++){
-    let p;
-    if(totalPages<=7)p=i;
-    else if(currentPage<=4)p=i;
-    else if(currentPage>=totalPages-3)p=totalPages-6+i;
-    else p=currentPage-3+i;
-    html+=`<button class="btn btn-sm ${p===currentPage?"btn-primary":"btn-default"}" style="min-width:34px;padding:6px 10px" onclick="(${onPage})(${p})">${p}</button>`;
-  }
-  html+=`<button class="btn btn-default btn-sm" ${currentPage>=totalPages?"disabled":""} onclick="(${onPage})(${currentPage+1})">Siguiente ›</button>`;
-  el.innerHTML=html;
-}
-function showToast(msg,type,duration){
-  const t=document.getElementById("toast");
-  t.textContent=msg;
-  t.style.background=type==="error"?"var(--red)":type==="info"?"#1D4ED8":"#14213D";
-  t.style.fontSize="12px";
-  t.classList.add("show");
-  clearTimeout(showToast._t);
-  showToast._t=setTimeout(()=>{t.classList.remove("show");t.style.background="";},duration||2800);
-}
-
-// ── INIT ──
-function init(){
-  loadPolicy();
-  loadModelRules();
-  loadData();
-  recomputeUrgency();
-  document.getElementById("today-date").textContent=new Date().toLocaleDateString("es-ES");
-  renderDashboard();
-}
-
-// ── SUPABASE AUTH ──
-let supabaseClient = null;
-let currentUser    = null;
-
-function initSupabaseClient(){
-  if(!sbUrl||!sbKey) return null;
-  if(supabaseClient) return supabaseClient;
-  try{
-    supabaseClient = supabase.createClient(sbUrl, sbKey);
-  }catch(e){ console.error("Supabase client error:", e); }
-  return supabaseClient;
-}
-
-async function authSignIn(){
-  const email = (document.getElementById("auth-email").value||"").trim();
-  const pwd   = (document.getElementById("auth-pwd").value||"").trim();
-  const errEl = document.getElementById("auth-error");
-  const btn   = document.getElementById("auth-login-btn");
-  if(!email||!pwd){ errEl.textContent="Introduce tu email y contraseña"; return; }
-  if(!sbUrl||!sbKey){
-    errEl.textContent="⚠️ Supabase no configurado — ve a Importar Excel";
-    return;
-  }
-  btn.textContent="Entrando..."; btn.disabled=true;
-  const sb = initSupabaseClient();
-  try{
-    const {data,error} = await sb.auth.signInWithPassword({email,password:pwd});
-    if(error) throw error;
-    currentUser = data.user;
-    // Re-init client so it picks up the new session token
-    supabaseClient = null;
-    initSupabaseClient();
-    onAuthSuccess();
-  }catch(e){
-    if(e.message==="Invalid login credentials"){
-      errEl.textContent="Email o contraseña incorrectos";
-    } else {
-      errEl.textContent="Error de conexión. Inténtalo de nuevo.";
-    }
-    document.getElementById("auth-pwd").value="";
-  }finally{
-    btn.textContent="Entrar"; btn.disabled=false;
-  }
-}
-
-async function authSignOut(){
-  const sb = initSupabaseClient();
-  if(sb) await sb.auth.signOut();
-  currentUser = null;
-  document.getElementById("lock-screen").style.display="flex";
-  document.getElementById("user-bar").classList.add("hidden");
-  document.getElementById("auth-email").value="";
-  document.getElementById("auth-pwd").value="";
-  document.getElementById("auth-error").textContent="";
-  authShowLogin();
-  setTimeout(()=>document.getElementById("auth-email")?.focus(),100);
-}
-
-async function authResetPwd(){
-  const email=(document.getElementById("reset-email").value||"").trim();
-  const msgEl=document.getElementById("reset-msg");
-  if(!email){msgEl.style.color="#DC2626";msgEl.textContent="Introduce tu email";return;}
-  const sb=initSupabaseClient();
-  const {error}=await sb.auth.resetPasswordForEmail(email,{
-    redirectTo: window.location.href
-  });
-  if(error){msgEl.style.color="#DC2626";msgEl.textContent=error.message;}
-  else{msgEl.style.color="#16A34A";msgEl.textContent="✅ Email enviado — revisa tu bandeja de entrada";}
-}
-
-function authShowReset(){
-  document.getElementById("auth-login").classList.add("hidden");
-  document.getElementById("auth-reset").classList.remove("hidden");
-}
-function authShowLogin(){
-  document.getElementById("auth-reset").classList.add("hidden");
-  document.getElementById("auth-login").classList.remove("hidden");
-}
-
-function onAuthSuccess(){
-  const ls = document.getElementById("lock-screen");
-  if(ls) ls.style.display="none";
-  // Show user bar
-  const bar=document.getElementById("user-bar");
-  if(bar) bar.classList.remove("hidden");
-  const emailEl=document.getElementById("user-email-display");
-  if(emailEl&&currentUser) emailEl.textContent=currentUser.email;
-  const av=document.getElementById("user-avatar");
-  if(av&&currentUser) av.textContent=(currentUser.email||"?")[0].toUpperCase();
-  // Init app then sync
-  init();
-  if(sbUrl&&sbKey) sbActivate(false);
-}
-
-async function checkAuth(){
-  if(!sbUrl||!sbKey){
-    // No creds - show app directly (shouldn't happen with hardcoded creds)
-    document.getElementById("lock-screen").style.display="none";
-    init(); loadSyncConfig();
-    return;
-  }
-  try{
-    const sb = initSupabaseClient();
-    if(!sb){ throw new Error("Supabase client failed"); }
-    const {data, error} = await sb.auth.getSession();
-    if(error) throw error;
-    if(data && data.session && data.session.user){
-      currentUser = data.session.user;
-      onAuthSuccess();
-    } else {
-      // No session — show login screen
-      setTimeout(()=>document.getElementById("auth-email")?.focus(), 200);
-    }
-  }catch(e){
-    console.error("Auth error:", e);
-    // Still show login screen on error
-    setTimeout(()=>document.getElementById("auth-email")?.focus(), 200);
-  }
-}
-
-window.addEventListener("DOMContentLoaded", ()=>{ checkAuth(); });
-
-// ── SUPABASE CARD HELPERS ──
-
-
-window.addEventListener("keydown",e=>{
-  if((e.ctrlKey||e.metaKey)&&e.key==="s"){
-    e.preventDefault();
-    if(_dirty) manualSave();
-    else showToast("Sin cambios pendientes ✓");
-  }
-});
-window.addEventListener("beforeunload",e=>{
-  if(_dirty){
-    e.preventDefault();
-    e.returnValue="Tienes cambios sin guardar. ¿Seguro que quieres salir?";
-  }
-});
-</script>
-</body>
-</html>
+>
