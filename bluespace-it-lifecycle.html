@@ -739,12 +739,51 @@ const SB_ANON  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 const SB_TABLE = 'it_store';
 const SB_KEY   = 'main_v4';
 const LS_KEY   = 'bs_v4_clean';
-const TEAM     = {
+// Équipe par défaut — les nouveaux membres s'ajoutent automatiquement
+// dès qu'ils se connectent une fois (depuis Supabase Auth)
+let TEAM = {
   'michael.gonzalez':'Michael Gonzalez',
   'diogo.monteiro':'Diogo Neiva','diogo':'Diogo Neiva',
   'marc.agenjo':'Marc Agenjo','oscar.lopez':'Oscar Lopez'
 };
-const TEAM_LIST = ['michael.gonzalez','diogo.monteiro','marc.agenjo','oscar.lopez'];
+let TEAM_LIST = ['michael.gonzalez','diogo.monteiro','marc.agenjo','oscar.lopez'];
+
+// Auto-register: quand un user se connecte, on l'ajoute dans TEAM
+function registerUser(email){
+  if(!email) return;
+  const handle=email.split('@')[0].toLowerCase();
+  if(TEAM[handle]) return; // déjà connu
+  // Convertir handle en nom: 'jordi.garcia' → 'Jordi Garcia'
+  const name=handle.split('.').map(p=>p[0].toUpperCase()+p.slice(1)).join(' ');
+  TEAM[handle]=name;
+  if(!TEAM_LIST.includes(handle)) TEAM_LIST.push(handle);
+  // Sauvegarder dans Supabase pour que tous les autres le voient aussi
+  saveTeamToSupabase();
+}
+
+async function saveTeamToSupabase(){
+  if(!user) return;
+  try{
+    const sb=getSB(); if(!sb) return;
+    await sb.from(SB_TABLE).upsert({
+      key:'team_v4',
+      value:{TEAM,TEAM_LIST,updatedAt:new Date().toISOString()},
+      updated_at:new Date().toISOString()
+    },{onConflict:'key'});
+  }catch(e){}
+}
+
+async function loadTeamFromSupabase(){
+  try{
+    const sb=getSB(); if(!sb) return;
+    const {data}=await sb.from(SB_TABLE).select('value').eq('key','team_v4').single();
+    if(data?.value?.TEAM){
+      // Merge avec valeurs par défaut (en gardant les défauts comme fallback)
+      Object.assign(TEAM,data.value.TEAM);
+      data.value.TEAM_LIST.forEach(h=>{ if(!TEAM_LIST.includes(h)) TEAM_LIST.push(h); });
+    }
+  }catch(e){}
+}
 const PIPE = [
   {k:'pending',    l:'Pendiente',      s:'Por gestionar',     c:'#64748B',bg:'#F8FAFC',b:'#E2E8F0',i:'⏳'},
   {k:'ticket',     l:'Ticket abierto', s:'SDP creado',        c:'#2563EB',bg:'#EFF6FF',b:'#BFDBFE',i:'🎫'},
@@ -831,9 +870,13 @@ async function checkAuth(){
   }catch(e){ $('lock').style.display='flex'; }
 }
 
-function startApp(){
+async function startApp(){
   $('lock').style.display='none';
   $('app').classList.add('on');
+  // Charger la team partagée depuis Supabase
+  await loadTeamFromSupabase();
+  // Enregistrer cet utilisateur (s'il est nouveau)
+  registerUser(user.email);
   const name=(user.email||'').split('@')[0];
   $('uname').textContent=TEAM[name]||name;
   $('adate').textContent=new Date().toLocaleDateString('es-ES');
