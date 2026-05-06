@@ -339,7 +339,19 @@ textarea{resize:vertical;min-height:70px}
 input[type=number]{-moz-appearance:textfield}
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
-input[type=checkbox]{width:auto;padding:0;border:1px solid #E2EAF4;border-radius:3px;accent-color:#2878C8}
+input[type=checkbox]{
+  width:16px !important;
+  height:16px !important;
+  padding:0 !important;
+  border:1.5px solid #2878C8 !important;
+  border-radius:3px !important;
+  accent-color:#2878C8;
+  cursor:pointer;
+  -webkit-appearance:checkbox !important;
+  -moz-appearance:checkbox !important;
+  appearance:checkbox !important;
+  background:#fff !important;
+}
 </style>
 </head>
 <body>
@@ -492,7 +504,7 @@ input[type=checkbox]{width:auto;padding:0;border:1px solid #E2EAF4;border-radius
   </div>
   <div class="tc" id="rcnt"></div>
   <div class="tw"><table><thead><tr>
-    <th>ID</th><th>Producto</th><th>Tipo</th><th>Dpto.</th><th>Usuario</th><th>Año</th><th>Edad</th><th>Estado SDP</th><th>Urgencia</th><th>Ticket</th><th>Responsable</th><th></th>
+    <th>ID</th><th>Producto</th><th>Tipo</th><th>Dpto.</th><th>Usuario</th><th>Año</th><th>Edad</th><th>Urgencia</th><th>Estado</th><th>Ticket</th><th>Responsable</th><th></th>
   </tr></thead><tbody id="rtb"></tbody></table></div>
   <div id="rnav" style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px"></div>
 </div>
@@ -564,7 +576,7 @@ input[type=checkbox]{width:auto;padding:0;border:1px solid #E2EAF4;border-radius
     <div id="inav" style="display:flex;gap:6px;align-items:center"></div>
   </div>
   <div class="tw"><table><thead><tr>
-    <th>ID</th><th>Producto</th><th>Tipo</th><th>Dpto.</th><th>Usuario</th><th>Año</th><th>Edad</th><th>Estado SDP</th><th>Urgencia</th><th>Ticket</th><th>Responsable</th><th></th>
+    <th>ID</th><th>Producto</th><th>Tipo</th><th>Dpto.</th><th>Usuario</th><th>Año</th><th>Edad</th><th>Urgencia</th><th>Estado</th><th>Ticket</th><th>Responsable</th><th></th>
   </tr></thead><tbody id="itb"></tbody></table></div>
 </div>
 
@@ -1028,11 +1040,20 @@ function urgChip(u){
 }
 
 // ── TABLE ROW ──
+function pipeChip(a){
+  if(!a.replStatus){
+    return '<span style="display:inline-flex;align-items:center;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;background:#F1F5F9;color:#64748B">⏳ Pendiente</span>';
+  }
+  const p=PIPE.find(x=>x.k===a.replStatus); if(!p) return '—';
+  return `<span style="display:inline-flex;align-items:center;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;background:${p.c}22;color:${p.c};border:1px solid ${p.b}">${p.i} ${p.l}</span>`;
+}
 function trow(a){
   const respHTML = a.assignee
     ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px"><span style="width:18px;height:18px;background:#2563EB;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:800;flex-shrink:0">${(TEAM[a.assignee]||a.assignee)[0].toUpperCase()}</span><span style="color:#2563EB;font-weight:600">${esc(TEAM[a.assignee]||a.assignee)}</span></span>`
     : '<span style="color:var(--text3);font-size:11px">—</span>';
-  return `<tr onclick="openDr('${escQ(a.id)}')">
+  // Highlight green when completed
+  const rowStyle = a.replStatus==='done' ? 'background:rgba(34,197,94,.04)' : '';
+  return `<tr onclick="openDr('${escQ(a.id)}')" style="${rowStyle}">
     <td><b>${esc(a.id)}</b></td>
     <td>${esc(a.product)||'—'}</td>
     <td>${typeChip(a.type)}</td>
@@ -1040,8 +1061,8 @@ function trow(a){
     <td>${esc(a.user)||'—'}</td>
     <td>${a.year||'—'}</td>
     <td style="font-weight:${a.age>=6?700:400};color:${a.age>=8?'#DC2626':a.age>=6?'#EA580C':'inherit'}">${a.age!=null?a.age+'a':'—'}</td>
-    <td>${sdpChip(a.sdpStatus)}</td>
     <td>${urgChip(a.urgency)}</td>
+    <td>${pipeChip(a)}</td>
     <td style="font-size:11px;color:var(--text2)">${a.ticket||'—'}</td>
     <td>${respHTML}</td>
     <td><button class="btn bk bxs" onclick="event.stopPropagation();openDr('${escQ(a.id)}')">Detalle</button></td>
