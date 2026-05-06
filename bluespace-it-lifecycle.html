@@ -879,6 +879,17 @@ async function checkAuth(){
     const {data}=await sb.auth.getSession();
     if(data?.session?.user){ user=data.session.user; startApp(); }
     else $('lock').style.display='flex';
+    // Auto-handler: déconnecte si le token expire pendant l'usage
+    sb.auth.onAuthStateChange((event,session)=>{
+      if(event==='SIGNED_OUT'||(event==='TOKEN_REFRESHED'&&!session)){
+        user=null;
+        $('app').classList.remove('on');
+        $('lock').style.display='flex';
+        toast('Sesión expirada, vuelve a iniciar sesión','info',5000);
+      } else if(event==='TOKEN_REFRESHED'&&session?.user){
+        user=session.user; // Token rafraîchi automatiquement
+      }
+    });
   }catch(e){ $('lock').style.display='flex'; }
 }
 
@@ -894,7 +905,16 @@ async function startApp(){
   $('adate').textContent=new Date().toLocaleDateString('es-ES');
   init();
   setTimeout(pull,800);
-  setInterval(pull,30000);
+  setInterval(pull,15000);
+  // Sync multi-onglet: si autre onglet sauvegarde, on recharge
+  window.addEventListener('storage',(e)=>{
+    if(e.key===LS_KEY&&e.newValue){
+      try{
+        const d=JSON.parse(e.newValue);
+        if(d.assets){ assets=d.assets; rules=d.rules||[]; policy=d.policy||{}; renderAll(); }
+      }catch(ex){}
+    }
+  });
 }
 
 // ── LOCAL STORAGE ──
@@ -934,21 +954,72 @@ function getUrg(a){
 function recompute(){ assets=assets.map(a=>({...a,urgency:getUrg(a)})); }
 
 // ── SUPABASE PUSH ──
-async function push(){
+async function push(retries){
   if(syncing) return;
+  if(retries===undefined) retries=2;
   syncing=true; setSync('🔄 Guardando...');
   try{
     const sb=getSB(); if(!sb) return;
     const who=(user?.email||'').split('@')[0];
+
+    // ÉTAPE 1: Pull la version Supabase la plus récente AVANT de push
+    // Pour merger avec les modifs des autres collègues
+    let serverData=null;
+    try{
+      const {data}=await sb.from(SB_TABLE).select('value').eq('key',SB_KEY).single();
+      if(data?.value) serverData=data.value;
+    }catch(e){}
+
+    // ÉTAPE 2: Merger avec les données serveur (timestamp wins)
+    if(serverData&&Array.isArray(serverData.assets)){
+      const sm=new Map(serverData.assets.map(a=>[a.id,a]));
+      const lm=new Map(assets.map(a=>[a.id,a]));
+      const allIds=new Set([...sm.keys(),...lm.keys()]);
+      const merged=[];
+      allIds.forEach(id=>{
+        const s=sm.get(id), l=lm.get(id);
+        if(!s){ merged.push(l); return; }
+        if(!l){ merged.push(s); return; }
+        const lTime=l.updatedAt?new Date(l.updatedAt).getTime():0;
+        const sTime=s.updatedAt?new Date(s.updatedAt).getTime():0;
+        // Plus récent gagne
+        merged.push(sTime>lTime?s:l);
+      });
+      assets=merged;
+
+      // Merger les règles (concat + dédup par match+type+urgency)
+      if(Array.isArray(serverData.rules)){
+        const ruleKey=r=>(r.match||'')+'|'+(r.type||'')+'|'+(r.urgency||'');
+        const seen=new Set();
+        const allRules=[...serverData.rules,...rules];
+        rules=allRules.filter(r=>{
+          const k=ruleKey(r);
+          if(seen.has(k)) return false;
+          seen.add(k); return true;
+        });
+      }
+      recompute();
+    }
+
+    // ÉTAPE 3: Push la version mergée
     await sb.from(SB_TABLE).upsert({
       key:SB_KEY,
       value:{assets,rules,policy,updatedAt:new Date().toISOString(),lastBy:who},
       updated_at:new Date().toISOString()
     },{onConflict:'key'});
     saveL(); dirty=false;
+    renderAll();
     setSync('✓ Guardado '+new Date().toLocaleTimeString('es-ES'));
-  }catch(e){ setSync('⚠ Error'); }
-  finally{ syncing=false; }
+  }catch(e){
+    setSync('⚠ Error: '+e.message);
+    syncing=false;
+    // Retry automatique en cas d'erreur réseau
+    if(retries>0&&(e.message?.includes('network')||e.message?.includes('fetch')||!navigator.onLine)){
+      setSync('🔄 Reintentando...');
+      setTimeout(()=>push(retries-1), 2000);
+    }
+  }
+  finally{ if(syncing) syncing=false; }
 }
 
 // ── SUPABASE PULL ──
@@ -960,20 +1031,37 @@ async function pull(){
     if(error||!data?.value) return;
     const rec=data.value;
     if(!Array.isArray(rec.assets)) return;
-    // Merge: keep local pipeline on known IDs
+    // ── MERGE INTELLIGENT par TIMESTAMP ──
+    // Pour chaque asset, on garde la version la plus récente (local OU remote)
+    // basée sur updatedAt. Si pas de timestamp, on garde remote (cas du fresh import).
     const lm=new Map(assets.map(a=>[a.id,a]));
+    let conflicts=0;
     assets=rec.assets.map(r=>{
       const l=lm.get(r.id);
-      if(!l) return r;
-      return {...r,ticket:l.ticket||r.ticket||'',replStatus:l.replStatus||r.replStatus||null,
-        assignee:l.assignee||r.assignee||'',newDevice:l.newDevice||r.newDevice||'',
-        replNote:l.replNote||r.replNote||'',completedAt:l.completedAt||r.completedAt||null,
-        history:l.history||r.history||[]};
+      if(!l) return r; // nouveau venu de Supabase → garder
+      const lTime=l.updatedAt?new Date(l.updatedAt).getTime():0;
+      const rTime=r.updatedAt?new Date(r.updatedAt).getTime():0;
+      // Si remote plus récent → écraser le local (collègue a modifié après nous)
+      if(rTime>lTime){
+        if(lTime>0&&r.updatedBy&&r.updatedBy!==(user?.email||'').split('@')[0]) conflicts++;
+        return r;
+      }
+      // Sinon garder le local (notre version est plus récente ou égale)
+      return l;
     });
     rules=rec.rules||rules; policy=rec.policy||policy;
     recompute(); saveL(); renderAll();
-    if(rec.lastBy&&rec.lastBy!==(user?.email||'').split('@')[0])
-      setSync('↓ '+( TEAM[rec.lastBy]||rec.lastBy));
+    if(conflicts>0&&rec.lastBy&&rec.lastBy!==(user?.email||'').split('@')[0]){
+      setSync('↓ '+conflicts+' actualizado(s) por '+(TEAM[rec.lastBy]||rec.lastBy));
+      toast('🔄 '+conflicts+' cambios de '+(TEAM[rec.lastBy]||rec.lastBy),'info',4000);
+    }else if(rec.lastBy&&rec.lastBy!==(user?.email||'').split('@')[0]){
+      setSync('↓ Sincronizado con '+(TEAM[rec.lastBy]||rec.lastBy));
+    }
+    // Si drawer ouvert sur un asset modifié par un collègue, le refresh
+    if(drId&&conflicts>0){
+      const stillOpen=document.getElementById('dov')?.classList.contains('on');
+      if(stillOpen) openDr(drId);
+    }
   }catch(e){}
 }
 
@@ -1301,7 +1389,12 @@ function rinv(){
 // ── DRAWER ──
 let drId=null;
 function openDr(id){
-  const a=assets.find(x=>x.id===id); if(!a) return;
+  const a=assets.find(x=>x.id===id);
+  if(!a){
+    // Asset disparu (collègue l'a supprimé ou import)
+    if(drId===id){ closeDr(); toast('Activo no encontrado','error',3000); }
+    return;
+  }
   drId=id;
   $('dr-title').textContent=`${typeIcon(a.type)} ${a.id}`;
   $('dr-sub').textContent=a.product||'—';
@@ -1392,9 +1485,10 @@ function patch(id, p){
   const idx=assets.findIndex(a=>a.id===id); if(idx<0) return;
   const a=assets[idx];
   const who=(user?.email||'').split('@')[0];
-  const h={when:new Date().toISOString(),who,what:Object.entries(p).map(([k,v])=>`${k}=${v}`).join(', ')};
-  assets[idx]={...a,...p,history:[...(a.history||[]).slice(-49),h]};
-  recompute(); savePush(200); renderAll();
+  const now=new Date().toISOString();
+  const h={when:now,who,what:Object.entries(p).map(([k,v])=>`${k}=${v}`).join(', ')};
+  assets[idx]={...a,...p,history:[...(a.history||[]).slice(-49),h],updatedAt:now,updatedBy:who};
+  recompute(); savePush(150); renderAll();
 }
 
 function startR(id){ patch(id,{replStatus:'ticket'}); closeDr(); }
@@ -1604,12 +1698,18 @@ function doImport(rows){
   let added=0, updated=0, skip=0;
   const fresh=[];
 
+  const seenIds=new Set();
   rows.forEach(r=>{
     const nom=(r[nk]||'').replace(/[\u200B-\u200D\uFEFF]/g,'').trim();
+    if(!nom){ skip++; return; }
     const prefix=nom.split('(')[0].trim();
+    if(!prefix){ skip++; return; }
     const isLT=prefix.startsWith('LT'), isMB=prefix.startsWith('MB'), isTAB=prefix.startsWith('TAB');
     if(!isLT&&!isMB&&!isTAB){ skip++; return; }
     const id=prefix;
+    // Dédup: si même ID apparaît 2x dans le CSV, on garde la première
+    if(seenIds.has(id)){ skip++; return; }
+    seenIds.add(id);
     const prod=pk?(r[pk]||'').replace(/[\u200B-\u200D\uFEFF]/g,'').trim():'';
     const dept=dk?(r[dk]||'').trim():'';
     const user2=uk?(r[uk]||'').trim():'';
@@ -1765,6 +1865,16 @@ window.addEventListener('keydown',e=>{
 
 // ── START ──
 window.addEventListener('DOMContentLoaded',()=>checkAuth());
+// Détection offline/online
+window.addEventListener('online',()=>{
+  setSync('🟢 Conectado');
+  if(dirty) setTimeout(()=>push(),500);
+  setTimeout(()=>pull(),1000);
+});
+window.addEventListener('offline',()=>{
+  setSync('🔴 Sin conexión');
+  toast('Sin conexión — los cambios se guardarán localmente','info',4000);
+});
 </script>
 </body>
 </html>
