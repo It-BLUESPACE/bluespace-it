@@ -304,7 +304,7 @@ textarea{resize:vertical;min-height:70px}
 input::placeholder,textarea::placeholder{color:var(--text3);font-weight:400}
 select{padding-right:10px;cursor:pointer}
 .chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;white-space:nowrap}
-.cl{background:#EBF4FF;color:var(--blue)}.cm{background:#F5F3FF;color:var(--purple)}.ct2{background:#F0FDF4;color:#15803D}
+.cl{background:#EBF4FF;color:var(--blue)}.cm{background:#F5F3FF;color:var(--purple)}.ct2{background:#F0FDF4;color:#15803D}.cd{background:#FFF7ED;color:#C2410C}
 .ciu{background:var(--greenBg);color:var(--green)}.cst{background:#E0F2FE;color:#075985}
 .cex{background:var(--redBg);color:var(--red)}.cdi{background:var(--bg);color:var(--text3)}
 .crp{background:var(--yellowBg);color:var(--yellow)}
@@ -457,8 +457,9 @@ input[type=checkbox]{
     <div class="sc"><div class="sv" id="d-high" style="color:var(--orange)">0</div><div class="sl">🟠 Necesario</div><div class="ss" id="d-highs"></div></div>
     <div class="sc"><div class="sv" id="d-warn" style="color:var(--yellow)">0</div><div class="sl">🟡 Próximo</div><div class="ss" id="d-warns"></div></div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px">
     <div class="card"><div class="ct">💻 Portátiles</div><div id="d-lt" style="margin-top:8px;font-size:11px;color:var(--text2)"></div></div>
+    <div class="card"><div class="ct">🖥️ Sobremesa</div><div id="d-aio" style="margin-top:8px;font-size:11px;color:var(--text2)"></div></div>
     <div class="card"><div class="ct">📱 Móviles</div><div id="d-mb" style="margin-top:8px;font-size:11px;color:var(--text2)"></div></div>
     <div class="card"><div class="ct">📟 Tablets</div><div id="d-tab" style="margin-top:8px;font-size:11px;color:var(--text2)"></div></div>
   </div>
@@ -494,6 +495,7 @@ input[type=checkbox]{
     <select id="rfilt-type" onchange="rpage=1;rrenov()" style="font-size:11px;padding:5px 10px;border:1px solid var(--border);border-radius:7px;background:#fff;color:var(--text2);cursor:pointer;outline:none">
       <option value="">Todos los tipos</option>
       <option value="Laptop">💻 Portátiles</option>
+      <option value="Desktop">🖥️ Sobremesa</option>
       <option value="Mobile">📱 Móviles</option>
       <option value="Tablet">📟 Tablets</option>
     </select>
@@ -517,6 +519,7 @@ input[type=checkbox]{
     <select id="kt" onchange="rkb()" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:12px;cursor:pointer;color:var(--text2);outline:none">
       <option value="">Todos</option>
       <option value="Laptop">💻 Portátiles</option>
+      <option value="Desktop">🖥️ Sobremesa</option>
       <option value="Mobile">📱 Móviles</option>
       <option value="Tablet">📟 Tablets</option>
     </select>
@@ -559,6 +562,7 @@ input[type=checkbox]{
     <select id="it" onchange="ipage=1;rinv()" style="width:auto">
       <option value="">Todos</option>
       <option value="Laptop">💻 Portátiles</option>
+      <option value="Desktop">🖥️ Sobremesa</option>
       <option value="Mobile">📱 Móviles</option>
       <option value="Tablet">📟 Tablets</option>
     </select>
@@ -585,7 +589,7 @@ input[type=checkbox]{
   <div class="ph"><h1>Importar Excel</h1><p>Actualiza el inventario desde un export ServiceDesk Plus</p></div>
   <div class="card">
     <div class="ct">📁 Cargar archivo (.xlsx / .csv)</div>
-    <div class="cs">Se importarán los activos LT (portátiles), MB (móviles) y TAB (tablets)</div>
+    <div class="cs">Se importarán los activos: LT (Portátiles) · AIO (Sobremesa) · MB (Móviles) · TAB (Tablets)</div>
     <div id="dropz" onclick="document.getElementById('finp').click()"
       style="margin-top:14px;border:2px dashed var(--border);border-radius:10px;
         padding:40px;text-align:center;cursor:pointer;transition:border-color .15s"
@@ -651,6 +655,7 @@ input[type=checkbox]{
     <div class="fb" style="margin-bottom:12px">
       <button class="fp on" onclick="setPF('all')" id="pf-all">Todos</button>
       <button class="fp" onclick="setPF('Laptop')" id="pf-Laptop">💻 Laptop</button>
+      <button class="fp" onclick="setPF('Desktop')" id="pf-Desktop">🖥️ Sobremesa</button>
       <button class="fp" onclick="setPF('Mobile')" id="pf-Mobile">📱 Móvil</button>
       <button class="fp" onclick="setPF('Tablet')" id="pf-Tablet">📟 Tablet</button>
     </div>
@@ -662,6 +667,7 @@ input[type=checkbox]{
           <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
             <button class="fp on" onclick="setRT('all')" id="rt-all">Todos</button>
             <button class="fp" onclick="setRT('Laptop')" id="rt-Laptop">💻 Laptop</button>
+            <button class="fp" onclick="setRT('Desktop')" id="rt-Desktop">🖥️ Sobremesa</button>
             <button class="fp" onclick="setRT('Mobile')" id="rt-Mobile">📱 Móvil</button>
             <button class="fp" onclick="setRT('Tablet')" id="rt-Tablet">📟 Tablet</button>
           </div>
@@ -775,8 +781,18 @@ function registerUser(email){
 
 async function saveTeamToSupabase(){
   if(!user) return;
+  // Wait if a sync is in progress (avoid race)
+  if(syncing){ setTimeout(saveTeamToSupabase, 500); return; }
   try{
     const sb=getSB(); if(!sb) return;
+    // Pull first to merge with latest team data
+    try{
+      const {data}=await sb.from(SB_TABLE).select('value').eq('key','team_v4').single();
+      if(data?.value?.TEAM){
+        Object.assign(TEAM, {...data.value.TEAM,...TEAM});
+        (data.value.TEAM_LIST||[]).forEach(h=>{ if(!TEAM_LIST.includes(h)) TEAM_LIST.push(h); });
+      }
+    }catch(e){}
     await sb.from(SB_TABLE).upsert({
       key:'team_v4',
       value:{TEAM,TEAM_LIST,updatedAt:new Date().toISOString()},
@@ -790,9 +806,10 @@ async function loadTeamFromSupabase(){
     const sb=getSB(); if(!sb) return;
     const {data}=await sb.from(SB_TABLE).select('value').eq('key','team_v4').single();
     if(data?.value?.TEAM){
-      // Merge avec valeurs par défaut (en gardant les défauts comme fallback)
-      Object.assign(TEAM,data.value.TEAM);
-      data.value.TEAM_LIST.forEach(h=>{ if(!TEAM_LIST.includes(h)) TEAM_LIST.push(h); });
+      // Merge: garder TOUTES les entrées (locales + serveur) — un user enregistré quelque part doit rester
+      const merged={...data.value.TEAM,...TEAM};
+      Object.assign(TEAM,merged);
+      (data.value.TEAM_LIST||[]).forEach(h=>{ if(!TEAM_LIST.includes(h)) TEAM_LIST.push(h); });
     }
   }catch(e){}
 }
@@ -822,7 +839,7 @@ function sync(id){ const el=$(id); if(!el) return; }
 function fmtPct(n,tot){ return tot?Math.round(n/tot*100)+'% del total':''; }
 
 // ── STATE ──
-let assets=[], rules=[], policy={};
+let assets=[], rules=[], policy={}, rulesUpdatedAt='', policyUpdatedAt='';
 let user=null, sbC=null;
 let dirty=false, syncing=false;
 let curView='dashboard';
@@ -905,7 +922,7 @@ async function startApp(){
   $('adate').textContent=new Date().toLocaleDateString('es-ES');
   init();
   setTimeout(pull,800);
-  setInterval(pull,15000);
+  setInterval(pull,5000);
   // Sync multi-onglet: si autre onglet sauvegarde, on recharge
   window.addEventListener('storage',(e)=>{
     if(e.key===LS_KEY&&e.newValue){
@@ -918,11 +935,11 @@ async function startApp(){
 }
 
 // ── LOCAL STORAGE ──
-function saveL(){ try{ localStorage.setItem(LS_KEY,JSON.stringify({assets,rules,policy})); }catch(e){} }
+function saveL(){ try{ localStorage.setItem(LS_KEY,JSON.stringify({assets,rules,policy,rulesUpdatedAt,policyUpdatedAt})); }catch(e){} }
 function loadL(){
   try{
     const d=JSON.parse(localStorage.getItem(LS_KEY)||'null');
-    if(d){ assets=d.assets||[]; rules=d.rules||[]; policy=d.policy||{}; return true; }
+    if(d){ assets=d.assets||[]; rules=d.rules||[]; policy=d.policy||{}; rulesUpdatedAt=d.rulesUpdatedAt||''; policyUpdatedAt=d.policyUpdatedAt||''; return true; }
   }catch(e){}
   return false;
 }
@@ -955,6 +972,7 @@ function recompute(){ assets=assets.map(a=>({...a,urgency:getUrg(a)})); }
 
 // ── SUPABASE PUSH ──
 async function push(retries){
+  if(!user) return; // pas connecté
   if(syncing) return;
   if(retries===undefined) retries=2;
   syncing=true; setSync('🔄 Guardando...');
@@ -987,16 +1005,16 @@ async function push(retries){
       });
       assets=merged;
 
-      // Merger les règles (concat + dédup par match+type+urgency)
+      // Merger les règles par timestamp: la version la plus récente gagne
       if(Array.isArray(serverData.rules)){
-        const ruleKey=r=>(r.match||'')+'|'+(r.type||'')+'|'+(r.urgency||'');
-        const seen=new Set();
-        const allRules=[...serverData.rules,...rules];
-        rules=allRules.filter(r=>{
-          const k=ruleKey(r);
-          if(seen.has(k)) return false;
-          seen.add(k); return true;
-        });
+        const sTime=serverData.rulesUpdatedAt?new Date(serverData.rulesUpdatedAt).getTime():0;
+        const lTime=rulesUpdatedAt?new Date(rulesUpdatedAt).getTime():0;
+        if(sTime>lTime){
+          // Serveur plus récent → on prend ses règles
+          rules=serverData.rules;
+          rulesUpdatedAt=serverData.rulesUpdatedAt||'';
+        }
+        // Sinon on garde les nôtres (plus récentes ou égales)
       }
       recompute();
     }
@@ -1004,7 +1022,7 @@ async function push(retries){
     // ÉTAPE 3: Push la version mergée
     await sb.from(SB_TABLE).upsert({
       key:SB_KEY,
-      value:{assets,rules,policy,updatedAt:new Date().toISOString(),lastBy:who},
+      value:{assets,rules,policy,rulesUpdatedAt,policyUpdatedAt,updatedAt:new Date().toISOString(),lastBy:who},
       updated_at:new Date().toISOString()
     },{onConflict:'key'});
     saveL(); dirty=false;
@@ -1024,6 +1042,7 @@ async function push(retries){
 
 // ── SUPABASE PULL ──
 async function pull(){
+  if(!user) return; // pas connecté
   if(syncing||dirty||pull._blocked) return;
   try{
     const sb=getSB(); if(!sb) return;
@@ -1033,23 +1052,36 @@ async function pull(){
     if(!Array.isArray(rec.assets)) return;
     // ── MERGE INTELLIGENT par TIMESTAMP ──
     // Pour chaque asset, on garde la version la plus récente (local OU remote)
-    // basée sur updatedAt. Si pas de timestamp, on garde remote (cas du fresh import).
+    // basée sur updatedAt. Préserve aussi les assets locaux pas encore poussés.
     const lm=new Map(assets.map(a=>[a.id,a]));
+    const rm=new Map(rec.assets.map(a=>[a.id,a]));
+    const allIds=new Set([...lm.keys(),...rm.keys()]);
     let conflicts=0;
-    assets=rec.assets.map(r=>{
-      const l=lm.get(r.id);
-      if(!l) return r; // nouveau venu de Supabase → garder
+    const merged=[];
+    allIds.forEach(id=>{
+      const l=lm.get(id), r=rm.get(id);
+      if(!r){ merged.push(l); return; }   // local seul → garder
+      if(!l){ merged.push(r); return; }   // remote seul → garder
       const lTime=l.updatedAt?new Date(l.updatedAt).getTime():0;
       const rTime=r.updatedAt?new Date(r.updatedAt).getTime():0;
-      // Si remote plus récent → écraser le local (collègue a modifié après nous)
       if(rTime>lTime){
         if(lTime>0&&r.updatedBy&&r.updatedBy!==(user?.email||'').split('@')[0]) conflicts++;
-        return r;
-      }
-      // Sinon garder le local (notre version est plus récente ou égale)
-      return l;
+        merged.push(r);
+      } else merged.push(l);
     });
-    rules=rec.rules||rules; policy=rec.policy||policy;
+    assets=merged;
+    // Merger règles par timestamp aussi en pull
+    if(Array.isArray(rec.rules)){
+      const sTime=rec.rulesUpdatedAt?new Date(rec.rulesUpdatedAt).getTime():0;
+      const lTime=rulesUpdatedAt?new Date(rulesUpdatedAt).getTime():0;
+      if(sTime>=lTime){ rules=rec.rules; rulesUpdatedAt=rec.rulesUpdatedAt||''; }
+    }
+    // Policy merge par timestamp
+    if(rec.policy){
+      const sTime=rec.policyUpdatedAt?new Date(rec.policyUpdatedAt).getTime():0;
+      const lTime=policyUpdatedAt?new Date(policyUpdatedAt).getTime():0;
+      if(sTime>=lTime){ policy=rec.policy; policyUpdatedAt=rec.policyUpdatedAt||''; }
+    }
     recompute(); saveL(); renderAll();
     if(conflicts>0&&rec.lastBy&&rec.lastBy!==(user?.email||'').split('@')[0]){
       setSync('↓ '+conflicts+' actualizado(s) por '+(TEAM[rec.lastBy]||rec.lastBy));
@@ -1104,10 +1136,10 @@ function fillSelects(){
 }
 
 // ── CHIPS ──
-function typeIcon(t){ return t==='Laptop'?'💻':t==='Tablet'?'📟':'📱'; }
+function typeIcon(t){ return t==='Laptop'?'💻':t==='Tablet'?'📟':t==='Desktop'?'🖥️':'📱'; }
 function typeChip(t){
-  const m={Laptop:'cl',Mobile:'cm',Tablet:'ct2'};
-  const l={Laptop:'Portátil',Mobile:'Móvil',Tablet:'Tablet'};
+  const m={Laptop:'cl',Mobile:'cm',Tablet:'ct2',Desktop:'cd'};
+  const l={Laptop:'Portátil',Mobile:'Móvil',Tablet:'Tablet',Desktop:'Sobremesa'};
   return `<span class="chip ${m[t]||'cm'}">${typeIcon(t)} ${l[t]||t}</span>`;
 }
 function sdpLabel(s){
@@ -1528,14 +1560,14 @@ function resetR(id){ patch(id,{replStatus:null,ticket:'',assignee:'',newDevice:'
 let polF='all', ruleType='all';
 function setPF(f){
   polF=f;
-  ['all','Laptop','Mobile','Tablet'].forEach(v=>{
+  ['all','Laptop','Desktop','Mobile','Tablet'].forEach(v=>{
     const e=$('pf-'+v); if(e) e.classList.toggle('on',f===v);
   });
   rRules();
 }
 function setRT(t){
   ruleType=t;
-  ['all','Laptop','Mobile','Tablet'].forEach(v=>{
+  ['all','Laptop','Desktop','Mobile','Tablet'].forEach(v=>{
     const e=$('rt-'+v); if(e) e.classList.toggle('on',t===v);
   });
   fillRuleModels();
@@ -1544,7 +1576,7 @@ function setRT(t){
 function fillRuleModels(){
   const tf=ruleType==='all'?null:ruleType;
   const dl=$('rule-models'); if(!dl) return;
-  const types=tf?[tf]:['Laptop','Mobile','Tablet'];
+  const types=tf?[tf]:['Laptop','Desktop','Mobile','Tablet'];
   const options=[];
   types.forEach(t=>{
     // Générations uniques pour ce type
@@ -1586,19 +1618,29 @@ function prevRule(){
 }
 
 function saveRule(){
+  if(saveRule._busy) return; // anti spam-click
   const match=($('rmatch').value||'').trim();
   const urgency=rUrgency||'critical';
   if(!match){ toast('Introduce un modelo o generación','error'); return; }
+  // Anti-doublon: même match+type+urgency déjà présent
+  const existing=rules.find(r=>r.match===match && r.type===(ruleType==='all'?null:ruleType));
+  if(existing){ toast('⚠️ Esta regla ya existe','error'); return; }
+  saveRule._busy=true;
   rules.push({match,urgency,type:ruleType==='all'?null:ruleType});
+  rulesUpdatedAt=new Date().toISOString();
   $('rform').classList.add('hidden');
   $('rmatch').value=''; $('rprev').textContent='';
   recompute(); savePush(); rRules(); rPolImpact(); renderAll();
   toast('✅ Regla guardada');
+  setTimeout(()=>{ saveRule._busy=false; }, 500);
 }
 
 function delRule(i){
   if(!confirm('¿Eliminar esta regla?')) return;
-  rules.splice(i,1); recompute(); savePush(); rRules(); rPolImpact(); renderAll();
+  rules.splice(i,1);
+  rulesUpdatedAt=new Date().toISOString();
+  recompute(); savePush(); rRules(); rPolImpact(); renderAll();
+  toast('🗑️ Regla eliminada');
 }
 
 function rRules(){
@@ -1704,8 +1746,8 @@ function doImport(rows){
     if(!nom){ skip++; return; }
     const prefix=nom.split('(')[0].trim();
     if(!prefix){ skip++; return; }
-    const isLT=prefix.startsWith('LT'), isMB=prefix.startsWith('MB'), isTAB=prefix.startsWith('TAB');
-    if(!isLT&&!isMB&&!isTAB){ skip++; return; }
+    const isLT=prefix.startsWith('LT'), isMB=prefix.startsWith('MB'), isTAB=prefix.startsWith('TAB'), isAIO=prefix.startsWith('AIO');
+    if(!isLT&&!isMB&&!isTAB&&!isAIO){ skip++; return; }
     const id=prefix;
     // Dédup: si même ID apparaît 2x dans le CSV, on garde la première
     if(seenIds.has(id)){ skip++; return; }
@@ -1715,7 +1757,7 @@ function doImport(rows){
     const user2=uk?(r[uk]||'').trim():'';
     const state=sk?(r[sk]||'In Use').trim():'In Use';
     const notes=ntk?(r[ntk]||'').replace(/\n/g,' ').trim():'';
-    const type=isLT?'Laptop':isTAB?'Tablet':'Mobile';
+    const type=isLT?'Laptop':isTAB?'Tablet':isAIO?'Desktop':'Mobile';
     const y=yr(prod), age=y?CY-y:null, g=gen(prod);
     const p=pipe[id]||{};
     if(Object.keys(p).length) updated++; else added++;
@@ -1741,7 +1783,7 @@ function doImport(rows){
   const res=$('ires');
   if(res){
     res.classList.remove('hidden');
-    res.textContent=`✅ ${added} activos añadidos · ${updated} con pipeline preservado · ${skip} otros tipos ignorados`;
+    res.innerHTML=`✅ <b>${added}</b> activos añadidos · <b>${updated}</b> con pipeline preservado · ${skip} otros tipos ignorados<br><span style="font-size:11px;font-weight:400;color:var(--text2)">Tipos importados: 💻 LT (Portátiles) · 🖥️ AIO (Sobremesa) · 📱 MB (Móviles) · 📟 TAB (Tablets)</span>`;
   }
   toast(`✅ ${fresh.length} activos importados`,'info',4000);
 }
@@ -1756,7 +1798,7 @@ function resetAll(){
       const sb=getSB();
       if(sb) await sb.from(SB_TABLE).upsert({
         key:SB_KEY,
-        value:{assets:[],rules:[],policy:{},updatedAt:new Date().toISOString()},
+        value:{assets:[],rules:[],policy:{},rulesUpdatedAt:new Date().toISOString(),updatedAt:new Date().toISOString()},
         updated_at:new Date().toISOString()
       },{onConflict:'key'});
       toast('🗑️ Datos borrados. Importa tu CSV.','info',5000);
@@ -1802,13 +1844,15 @@ function updateInfPreview(){
   if(!$('inf-from').value){ $('inf-preview').innerHTML='<span style="color:var(--text3)">Selecciona un período</span>'; return; }
   const done=assets.filter(a=>a.completedAt&&new Date(a.completedAt)>=from&&new Date(a.completedAt)<=to);
   const lt=done.filter(a=>a.type==='Laptop').length;
+  const aio=done.filter(a=>a.type==='Desktop').length;
   const mb=done.filter(a=>a.type==='Mobile').length;
   const tab=done.filter(a=>a.type==='Tablet').length;
   $('inf-preview').innerHTML=done.length===0
     ?'<span style="color:var(--text3)">Sin reemplazos completados en este período</span>'
     :`<b style="font-size:18px;font-weight:800;color:var(--blue)">${done.length}</b><span style="color:var(--text3)">reemplazos</span>
-      <span style="margin-left:8px">💻 <b>${lt}</b> portátiles</span>
-      <span style="margin-left:8px">📱 <b>${mb}</b> móviles</span>
+      ${lt?`<span style="margin-left:8px">💻 <b>${lt}</b> portátiles</span>`:''}
+      ${aio?`<span style="margin-left:8px">🖥️ <b>${aio}</b> sobremesa</span>`:''}
+      ${mb?`<span style="margin-left:8px">📱 <b>${mb}</b> móviles</span>`:''}
       ${tab?`<span style="margin-left:8px">📟 <b>${tab}</b> tablets</span>`:''}`;
 }
 function showInf(){
