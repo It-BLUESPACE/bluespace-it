@@ -1214,6 +1214,8 @@ function rdash(){
     return `${list.length} total · ${iu2.length} en uso${cr?` · <span style="color:#DC2626">${cr} críticos</span>`:''}${hi?` · <span style="color:#EA580C">${hi} necesarios</span>`:''}`;
   };
   $('d-lt').innerHTML=sum(assets.filter(a=>a.type==='Laptop'));
+  const aio=assets.filter(a=>a.type==='Desktop');
+  $('d-aio').innerHTML=aio.length?sum(aio):'<span style="color:var(--text3)">Sin sobremesa importados</span>';
   $('d-mb').innerHTML=sum(assets.filter(a=>a.type==='Mobile'));
   const tab=assets.filter(a=>a.type==='Tablet');
   $('d-tab').innerHTML=tab.length?sum(tab):'<span style="color:var(--text3)">Sin tablets importadas</span>';
@@ -1579,10 +1581,17 @@ function fillRuleModels(){
   const types=tf?[tf]:['Laptop','Desktop','Mobile','Tablet'];
   const options=[];
   types.forEach(t=>{
+    const typeAssets=assets.filter(a=>a.type===t);
     // Générations uniques pour ce type
-    const gens=[...new Set(assets.filter(a=>a.type===t&&a.gen).map(a=>a.gen.toUpperCase()))].sort();
-    // Modèles uniques pour ce type
-    const models=[...new Set(assets.filter(a=>a.type===t&&a.product).map(a=>a.product))].sort();
+    const gens=[...new Set(typeAssets.filter(a=>a.gen).map(a=>a.gen.toUpperCase()))].sort();
+    // Modèles uniques pour ce type (depuis 'product' ou parsé depuis 'nom')
+    const modelsFromProd=typeAssets.filter(a=>a.product&&!/unknown|desconocido|n\/a|^-+$/i.test(a.product)).map(a=>a.product);
+    const modelsFromNom=typeAssets.map(a=>{
+      // Extraire texte entre parenthèses dans nom: "AIO001 (OptiPlex 7090)" → "OptiPlex 7090"
+      const m=(a.nom||'').match(/\(([^)]+)\)/);
+      return m?m[1].trim():null;
+    }).filter(m=>m&&!/unknown|desconocido|n\/a|^-+$/i.test(m));
+    const models=[...new Set([...modelsFromProd,...modelsFromNom])].sort();
     gens.forEach(g=>options.push(g));
     models.forEach(m=>options.push(m));
   });
